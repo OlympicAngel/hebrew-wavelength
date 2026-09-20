@@ -84,23 +84,35 @@ export function roundScreen(ctx) {
 
   let currentView = null;
 
-  /** @returns {string} פאנל החבלה - מוצג למנחשים בשלב הרמז, במצב תחרותי עם טיימר רמז מוגדר בלבד (לא לנותן הרמז) */
+  /**
+   * @returns {string} פאנל החבלה - מוצג למנחשים בשלב הרמז, במצב תחרותי עם טיימר רמז מוגדר (לא לנותן הרמז).
+   * אם כבר נוצלה חבלה הסיבוב הזה - תצוגה ממוזערת בלבד; אם החלון נסגר בלי שנוצלה - לא מוצג כלום (ראו paintBomb).
+   */
   function bombHtml(view) {
     if (view.mode !== 'competitive' || !view.config.clueSeconds || view.phase !== 'clue') return '';
     if (view.you === view.psychicId) return '';
     const me = view.players.find((p) => p.id === view.you);
     if (!me) return '';
+
+    if (view.bombUsedRound || me.bombUsed) {
+      const text = me.bombUsed ? 'ניצלתם את החבלה שלכם למשחק הזה 💤' : 'חבלה כבר נוצלה בסיבוב הזה 💣';
+      return `<p class="bomb-mini muted center">${text}</p>`;
+    }
+
     return `<div class="bomb-panel" data-bomb>
         <div class="bomb-row">
           <span class="bomb-label">💣 חבלה: מחליפים את הכרטיס לכולם, ומחזירים 10% מזמן הרמז</span>
-          <button class="bomb-btn" data-bomb-btn>💣</button>
+          <button class="bomb-btn armed" data-bomb-btn>💣</button>
         </div>
         <div class="bomb-window"><div class="bomb-window-fill" data-bomb-fill></div></div>
         <p class="muted center" data-bomb-status style="font-size:.78rem"></p>
       </div>`;
   }
 
-  /** מעדכן כל טיק את מד החלון של החבלה (זמין רק ב-20% הראשונים של זמן הרמז) */
+  /**
+   * מעדכן כל טיק את מד החלון של החבלה (זמין רק ב-20% הראשונים של זמן הרמז).
+   * ברגע שהחלון נסגר בלי שנוצלה חבלה, מסתירים את הפאנל לגמרי כדי לא להשאיר רכיב מת על המסך.
+   */
   function paintBomb(view) {
     const panel = root.querySelector('[data-bomb]');
     if (!panel || !view.deadline) return;
@@ -108,21 +120,13 @@ export function roundScreen(ctx) {
     const windowMs = totalMs * BOMB_WINDOW_RATIO;
     const elapsed = totalMs - (view.deadline - Date.now());
     const left = Math.max(0, windowMs - elapsed);
-    panel.querySelector('[data-bomb-fill]').style.width = `${Math.min(100, (left / windowMs) * 100)}%`;
 
-    const me = view.players.find((p) => p.id === view.you);
-    const usable = left > 0 && !me?.bombUsed && !view.bombUsedRound;
-    const btn = panel.querySelector('[data-bomb-btn]');
-    btn.disabled = !usable;
-    btn.classList.toggle('armed', usable);
-
-    panel.querySelector('[data-bomb-status]').textContent = me?.bombUsed
-      ? 'כבר ניצלתם את החבלה שלכם למשחק הזה 💤'
-      : view.bombUsedRound
-        ? 'כבר נוצלה חבלה בסיבוב הזה'
-        : left > 0
-          ? `נותרו ${Math.ceil(left / 1000)} שנ' לחבל`
-          : 'הזמן לחבלה עבר';
+    if (left <= 0) {
+      root.querySelector('[data-bomb-slot]').innerHTML = '';
+      return;
+    }
+    panel.querySelector('[data-bomb-fill]').style.width = `${(left / windowMs) * 100}%`;
+    panel.querySelector('[data-bomb-status]').textContent = `נותרו ${Math.ceil(left / 1000)} שנ' לחבל`;
   }
 
   /** אפקט "פיצוץ" למסך כולו - רטט, רעידה ודגל אדום, כשמישהו מפעיל חבלה */
