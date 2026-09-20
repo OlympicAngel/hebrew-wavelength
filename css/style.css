@@ -337,6 +337,7 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
   50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(224, 75, 75, 0); }
 }
 
+/* עוטף קליק-דרך (pointer-events: none עובר בירושה לילדים) כדי שאפשר יהיה להמשיך לשחק מתחת לבאנר */
 .bomb-flash-overlay {
   position: fixed;
   inset: 0;
@@ -344,22 +345,32 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
   display: grid;
   place-items: center;
   pointer-events: none;
+}
+/* להבת הרקע דוהה מהר - האפקט הרגעי של "פיצוץ" */
+.bomb-flash-bg {
+  position: absolute;
+  inset: 0;
   background: radial-gradient(circle, rgba(255, 90, 40, 0.55), rgba(224, 75, 75, 0.15) 55%, transparent 78%);
   animation: bomb-flash 0.9s ease-out forwards;
 }
+/* הבאנר עצמו נשאר קריא לפחות 3 שניות, בנפרד מדעיכת הרקע */
 .bomb-banner {
-  font-size: 1.6rem;
+  position: relative;
+  font-size: 1.5rem;
   font-weight: 800;
   color: #fff;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
-  animation: bomb-pop 0.9s ease-out forwards;
+  background: rgba(20, 20, 20, 0.55);
+  padding: 10px 20px;
+  border-radius: 999px;
+  animation: bomb-pop 3.2s ease-out forwards;
 }
 @keyframes bomb-flash { from { opacity: 1; } to { opacity: 0; } }
 @keyframes bomb-pop {
   0% { transform: scale(0.6); opacity: 0; }
-  20% { transform: scale(1.15); opacity: 1; }
-  35% { transform: scale(1); }
-  80% { opacity: 1; }
+  8% { transform: scale(1.15); opacity: 1; }
+  14% { transform: scale(1); }
+  88% { opacity: 1; }
   100% { opacity: 0; }
 }
 

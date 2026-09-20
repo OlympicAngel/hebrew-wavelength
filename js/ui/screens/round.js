@@ -134,10 +134,11 @@ export function roundScreen(ctx) {
     const app = document.getElementById('app');
     app.classList.add('shake');
     setTimeout(() => app.classList.remove('shake'), 500);
-    const overlay = el(`<div class="bomb-flash-overlay"><div class="bomb-banner">💥 ${esc(message)}</div></div>`);
+    // הרקע דועך מהר, אבל הטקסט נשאר קריא כמה שניות; העוטף כולו קליק-דרך כדי לא לחסום את המשך המשחק
+    const overlay = el(`<div class="bomb-flash-overlay"><div class="bomb-flash-bg"></div><div class="bomb-banner">💥 ${esc(message)}</div></div>`);
     document.body.append(overlay);
     vibrate([40, 60, 120]);
-    setTimeout(() => overlay.remove(), 900);
+    setTimeout(() => overlay.remove(), 3200);
   }
 
   /** @returns {string} HTML של אזור הכפתורים, לפי השלב והתפקיד */
