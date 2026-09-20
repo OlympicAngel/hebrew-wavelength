@@ -1,6 +1,6 @@
-/** מסך הסיום: פודיום, טבלת דירוג וסיכום הסיבובים */
+/** מסך הסיום: פודיום/מד קבוצתי (לפי המצב), וסיכום הסיבובים */
 import { el, on, esc } from '../dom.js';
-import { standings } from '../../game/engine.js';
+import { standings, teamGauge } from '../../game/engine.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -8,8 +8,7 @@ export function finalScreen(ctx) {
   const root = el(`
     <div class="stack fade-in">
       <div class="logo"><h1>🏆 סוף<span class="wave"> המשחק</span></h1></div>
-      <div class="podium" data-podium></div>
-      <div class="card"><h3>טבלת ניקוד</h3><div class="players" data-table></div></div>
+      <div data-scoreboard></div>
       <div class="card"><h3>סיכום הסיבובים</h3><div class="stack" data-history></div></div>
       <div data-actions class="stack"></div>
     </div>`);
@@ -18,32 +17,7 @@ export function finalScreen(ctx) {
   on(root, 'click', '[data-leave]', () => ctx.leave());
 
   function update(view) {
-    const table = standings(view);
-    const top = table.slice(0, 3);
-    const order = [top[1], top[0], top[2]].filter(Boolean); // כסף במרכז-שמאל, זהב במרכז
-    const classes = new Map([[top[0], 'gold'], [top[1], 'silver'], [top[2], 'bronze']]);
-
-    root.querySelector('[data-podium]').innerHTML = order
-      .map(
-        (p) => `<div class="step ${classes.get(p)}">
-            <div class="face">${p.avatar}</div>
-            <div class="muted">${esc(p.name)}</div>
-            <div class="block"><div class="big-num" style="font-size:1.5rem">${p.score}</div></div>
-          </div>`,
-      )
-      .join('');
-
-    root.querySelector('[data-table]').innerHTML = table
-      .map(
-        (p) => `<div class="player ${p.id === view.you ? '' : ''}">
-            <span>${MEDALS[p.rank - 1] ?? `${p.rank}.`}</span>
-            <span style="font-size:1.3rem">${p.avatar}</span>
-            <span class="name">${esc(p.name)}${p.id === view.you ? ' (אתם)' : ''}</span>
-            <span class="score">${p.score}</span>
-          </div>`,
-      )
-      .join('');
-
+    root.querySelector('[data-scoreboard]').innerHTML = view.mode === 'shared' ? sharedHtml(view) : competitiveHtml(view);
     root.querySelector('[data-history]').innerHTML = view.history
       .map((h) => {
         const psychic = view.players.find((p) => p.id === h.psychicId);
@@ -66,4 +40,49 @@ export function finalScreen(ctx) {
   }
 
   return { el: root, update };
+}
+
+/** @returns {string} פודיום + טבלת ניקוד אישית - למצב תחרותי */
+function competitiveHtml(view) {
+  const table = standings(view);
+  const top = table.slice(0, 3);
+  const order = [top[1], top[0], top[2]].filter(Boolean); // כסף במרכז-שמאל, זהב במרכז
+  const classes = new Map([[top[0], 'gold'], [top[1], 'silver'], [top[2], 'bronze']]);
+
+  const podium = order
+    .map(
+      (p) => `<div class="step ${classes.get(p)}">
+          <div class="face">${p.avatar}</div>
+          <div class="muted">${esc(p.name)}</div>
+          <div class="block"><div class="big-num" style="font-size:1.5rem">${p.score}</div></div>
+        </div>`,
+    )
+    .join('');
+
+  const rows = table
+    .map(
+      (p) => `<div class="player">
+          <span>${MEDALS[p.rank - 1] ?? `${p.rank}.`}</span>
+          <span style="font-size:1.3rem">${p.avatar}</span>
+          <span class="name">${esc(p.name)}${p.id === view.you ? ' (אתם)' : ''}</span>
+          <span class="score">${p.score}</span>
+        </div>`,
+    )
+    .join('');
+
+  return `<div class="podium" data-podium>${podium}</div>
+    <div class="card"><h3>טבלת ניקוד</h3><div class="players" data-table>${rows}</div></div>`;
+}
+
+/** @returns {string} מד ההישג הקבוצתי (חלש/נחמד/מעולה/אגדי) - למצב משותף */
+function sharedHtml(view) {
+  const gauge = teamGauge(view);
+  return `<div class="card center">
+      <h3>הישג הקבוצה</h3>
+      <div style="font-size:4rem;line-height:1">${gauge.emoji}</div>
+      <div class="big-num">${gauge.label}</div>
+      <div class="gauge-bar"><div class="gauge-fill gauge-${gauge.key}" style="width:${Math.round(gauge.ratio * 100)}%"></div></div>
+      <div class="row between muted" dir="ltr" style="font-size:.78rem"><span>חלש</span><span>נחמד</span><span>מעולה</span><span>אגדי</span></div>
+      <p class="muted">ניקוד קבוצתי: ${view.teamScore} נקודות ב-${view.history.length} סיבובים</p>
+    </div>`;
 }

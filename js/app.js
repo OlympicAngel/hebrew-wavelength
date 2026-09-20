@@ -1,5 +1,5 @@
 /** נקודת הכניסה: מחזיקה את הסשן הפעיל ומחליפה מסכים לפי שלב המשחק */
-import { $, toast, storage } from './ui/dom.js';
+import { $, toast, storage, vibrate } from './ui/dom.js';
 import { HostSession, ClientSession } from './game/session.js';
 import { homeScreen } from './ui/screens/home.js';
 import { rulesScreen } from './ui/screens/rules.js';
@@ -110,3 +110,8 @@ window.addEventListener('beforeunload', (e) => {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
+
+// משוב מישושי גלובלי: רטט קצר בכל לחיצה על כפתור בכל האפליקציה
+document.addEventListener('click', (e) => {
+  if (e.target.closest('button')) vibrate(8);
+});

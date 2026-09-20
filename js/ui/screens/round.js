@@ -2,22 +2,46 @@
  * מסך הסיבוב - משרת את שלושת השלבים (רמז / ניחוש / חשיפה)
  * כדי שהחוגה תישאר אותו רכיב ולא "תקפוץ" בין מעברים.
  */
-import { el, on, esc } from '../dom.js';
+import { el, on, esc, vibrate } from '../dom.js';
 import { Dial } from '../dial.js';
 import { maxSwaps } from '../../game/engine.js';
+import { PACKS } from '../../data/packs.js';
+
+const packById = Object.fromEntries(PACKS.map((p) => [p.id, p]));
+const MOVE_THROTTLE_MS = 70; // תדירות שידור תזוזת המחט החיה למארח - מספיק חלק, לא מציף את הרשת
 
 export function roundScreen(ctx) {
   let myGuess = 50;
   let locked = false;
   let lastRound = 0;
   let tick = null;
+  let lastMoveSent = 0;
+  let lastVibrateValue = null;
 
-  const dial = new Dial({ interactive: false, onChange: (v) => (myGuess = v) });
+  const dial = new Dial({
+    interactive: false,
+    onChange: (v) => {
+      myGuess = v;
+      // דיווח חי למארח (רק בזמן ניחוש בפועל, לפני נעילה) + משוב רטט קטן על כל "קליק" בסולם
+      if (currentView?.phase === 'guess' && !locked && currentView.you !== currentView.psychicId) {
+        const now = Date.now();
+        if (now - lastMoveSent > MOVE_THROTTLE_MS) {
+          lastMoveSent = now;
+          ctx.act('guessMove', { value: v });
+        }
+      }
+      if (lastVibrateValue == null || Math.abs(v - lastVibrateValue) >= 2) {
+        lastVibrateValue = v;
+        vibrate(4);
+      }
+    },
+  });
 
   const root = el(`
     <div class="stack fade-in">
       <div class="topbar">
         <span class="pill" data-round></span>
+        <span class="pill" data-category></span>
         <span class="pill" data-timer hidden></span>
         <span class="pill" data-score></span>
       </div>
@@ -107,6 +131,7 @@ export function roundScreen(ctx) {
 
   /** שורת השחקנים בתחתית - מי הרמז ומי כבר נעל ניחוש */
   function peopleHtml(view) {
+    const shared = view.mode === 'shared';
     return `<div class="players">${view.players
       .map((p) => {
         const isPsychic = p.id === view.psychicId;
@@ -115,7 +140,7 @@ export function roundScreen(ctx) {
             <span style="font-size:1.25rem">${p.avatar}</span>
             <span class="name">${esc(p.name)}</span>
             ${isPsychic ? '<span class="badge psychic">הרמז</span>' : ready ? '<span class="badge ready">מוכן</span>' : ''}
-            <span class="score">${p.score}</span>
+            ${shared ? '' : `<span class="score">${p.score}</span>`}
           </div>`;
       })
       .join('')}</div>`;
@@ -134,7 +159,10 @@ export function roundScreen(ctx) {
     }
 
     root.querySelector('[data-round]').textContent = `סיבוב ${view.round}/${view.config.rounds}`;
-    root.querySelector('[data-score]').textContent = `⭐ ${view.players.find((p) => p.id === view.you)?.score ?? 0}`;
+    const pack = packById[view.card?.packId];
+    root.querySelector('[data-category]').textContent = pack ? `${pack.emoji} ${pack.name}` : '';
+    root.querySelector('[data-score]').textContent =
+      view.mode === 'shared' ? `🤝 ${view.teamScore}` : `⭐ ${view.players.find((p) => p.id === view.you)?.score ?? 0}`;
     root.querySelector('[data-low]').textContent = view.card?.low ?? '';
     root.querySelector('[data-high]').textContent = view.card?.high ?? '';
 
@@ -149,6 +177,7 @@ export function roundScreen(ctx) {
     dial.setInteractive(view.phase === 'guess' && !isPsychic && !locked);
 
     if (view.phase === 'reveal') {
+      dial.setPeers([]);
       const last = view.history[view.history.length - 1];
       dial.setNeedles(
         last.results
@@ -161,6 +190,16 @@ export function roundScreen(ctx) {
       );
     } else {
       dial.setNeedles(isPsychic ? [] : null);
+      // המארח בלבד רואה את תזוזות שאר המנחשים בזמן אמת, לפני שהם נועלים
+      const isHostView = view.players.find((p) => p.id === view.you)?.isHost;
+      dial.setPeers(
+        isHostView && view.phase === 'guess'
+          ? view.players
+              .filter((p) => p.connected && p.id !== view.psychicId && p.id !== view.you)
+              .map((p) => ({ value: view.guesses[p.id] ?? view.liveGuesses[p.id], avatar: p.avatar }))
+              .filter((n) => n.value != null)
+          : [],
+      );
     }
 
     root.querySelector('[data-controls]').innerHTML = controlsHtml(view, isPsychic);
@@ -172,7 +211,7 @@ export function roundScreen(ctx) {
   function startTimer(view) {
     clearInterval(tick);
     const pill = root.querySelector('[data-timer]');
-    pill.hidden = !(view.phase === 'guess' && view.deadline);
+    pill.hidden = !((view.phase === 'guess' || view.phase === 'clue') && view.deadline);
     if (pill.hidden) return;
     const paint = () => {
       const left = Math.max(0, Math.ceil((view.deadline - Date.now()) / 1000));

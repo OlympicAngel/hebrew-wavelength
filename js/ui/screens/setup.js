@@ -11,6 +11,19 @@ const TIMERS = [
   { value: 60, label: 'דקה' },
 ];
 
+const MODES = [
+  { value: 'competitive', emoji: '🏆', name: 'תחרותי', desc: 'ניקוד אישי, טבלת דירוג ופודיום בסוף' },
+  { value: 'shared', emoji: '🤝', name: 'משותף', desc: 'ניקוד קבוצתי אחד לכולם, עם מד הישג בסוף' },
+];
+
+/** @returns {string} HTML לקבוצת כפתורי טיימר עם מפתח ייחודי (כדי שכמה קבוצות לא יתנגשו) */
+function timerPicker(key, label, current) {
+  return `<h3>${label}</h3>
+    <div class="row wrap" data-timer-group="${key}">
+      ${TIMERS.map((t) => `<button class="chip ${t.value === current ? 'on' : ''}" data-timer="${key}:${t.value}">${t.label}</button>`).join('')}
+    </div>`;
+}
+
 export function setupScreen(ctx) {
   const config = { ...DEFAULT_CONFIG, packIds: PACKS.map((p) => p.id) };
   let transport = 'code';
@@ -45,12 +58,25 @@ export function setupScreen(ctx) {
       </div>
 
       <div class="card">
-        <h3>זמן לניחוש</h3>
-        <div class="row wrap" data-timers>
-          ${TIMERS.map(
-            (t) => `<button class="chip ${t.value === config.guessSeconds ? 'on' : ''}" data-timer="${t.value}">${t.label}</button>`,
+        ${timerPicker('clue', '⏱️ זמן לחשוב על רמז', config.clueSeconds)}
+      </div>
+
+      <div class="card">
+        ${timerPicker('guess', '⏱️ זמן לניחוש', config.guessSeconds)}
+      </div>
+
+      <div class="card">
+        <h3>מצב משחק</h3>
+        <div class="stack" data-modes>
+          ${MODES.map(
+            (m) => `<button class="chip ${m.value === config.mode ? 'on' : ''}" data-mode="${m.value}"
+                      style="text-align:start;border-radius:14px;padding:12px 14px">
+                      <div>${m.emoji} <b>${m.name}</b></div>
+                      <div class="muted" style="font-size:.8rem">${m.desc}</div>
+                    </button>`,
           ).join('')}
         </div>
+        <p class="muted">עם שני שחקנים בלבד המצב המשותף נכפה אוטומטית.</p>
       </div>
 
       <div class="card">
@@ -85,8 +111,15 @@ export function setupScreen(ctx) {
   });
 
   on(root, 'click', '[data-timer]', (_, btn) => {
-    config.guessSeconds = +btn.dataset.timer;
-    setOn(root, 'data-timer', config.guessSeconds);
+    const [key, value] = btn.dataset.timer.split(':');
+    config[key === 'clue' ? 'clueSeconds' : 'guessSeconds'] = +value;
+    const group = root.querySelector(`[data-timer-group="${key}"]`);
+    group.querySelectorAll('[data-timer]').forEach((b) => b.classList.toggle('on', b === btn));
+  });
+
+  on(root, 'click', '[data-mode]', (_, btn) => {
+    config.mode = btn.dataset.mode;
+    setOn(root, 'data-mode', config.mode);
   });
 
   on(root, 'click', '[data-pack]', (_, btn) => btn.classList.toggle('on'));

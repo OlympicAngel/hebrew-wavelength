@@ -260,6 +260,22 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
 .podium .step.bronze .block { background: #6b4a2e; height: 62px; }
 .podium .face { font-size: 1.9rem; }
 
+/* ------------------------------------------------------------ מד קבוצתי (מצב משותף) */
+
+.gauge-bar {
+  width: 100%;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  margin: 10px 0 4px;
+}
+.gauge-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.gauge-fill.gauge-bad { background: var(--red); }
+.gauge-fill.gauge-nice { background: var(--blue); }
+.gauge-fill.gauge-super { background: var(--yellow); }
+.gauge-fill.gauge-extreme { background: var(--orange); }
+
 .code-box {
   font-size: 2.6rem;
   font-weight: 800;

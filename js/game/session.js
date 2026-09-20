@@ -76,7 +76,10 @@ export class HostSession extends Emitter {
         game.players.forEach((p) => ((p.score = 0), (p.swapsUsed = 0)));
         game.round = 0;
         game.history = [];
+        game.teamScore = 0;
+        game.mode = G.resolveMode(game.config, game.players);
         G.startRound(game);
+        this._armClueTimer();
         break;
 
       case 'swap':
@@ -89,13 +92,20 @@ export class HostSession extends Emitter {
         if (!clue) return;
         game.clue = clue;
         game.phase = 'guess';
-        this._startTimer();
+        this._armGuessTimer();
         break;
       }
+
+      // תזוזה חיה של המחט לפני נעילה - לא סופית, רק לתצוגה אצל המארח
+      case 'guessMove':
+        if (game.phase !== 'guess' || fromId === game.psychicId) return;
+        game.liveGuesses[fromId] = Math.max(0, Math.min(100, Math.round(payload.value)));
+        break;
 
       case 'guess': {
         if (game.phase !== 'guess' || fromId === game.psychicId) return;
         game.guesses[fromId] = Math.max(0, Math.min(100, Math.round(payload.value)));
+        delete game.liveGuesses[fromId];
         if (G.allGuessesIn(game)) this._reveal();
         break;
       }
@@ -103,6 +113,7 @@ export class HostSession extends Emitter {
       case 'next':
         if (game.phase !== 'reveal') return;
         G.advance(game);
+        if (game.phase === 'clue') this._armClueTimer();
         break;
 
       case 'restart':
@@ -110,6 +121,7 @@ export class HostSession extends Emitter {
         game.phase = 'lobby';
         game.round = 0;
         game.history = [];
+        game.teamScore = 0;
         game.players.forEach((p) => ((p.score = 0), (p.swapsUsed = 0)));
         break;
 
@@ -159,17 +171,31 @@ export class HostSession extends Emitter {
     });
   }
 
-  _startTimer() {
+  /** מתזמן טיימר גנרי לשלב הנוכחי; ללא ערך (0) פשוט מבטל טיימר קודם ומשאיר ללא הגבלה */
+  _startTimer(seconds, onExpire) {
     clearTimeout(this.timer);
-    const seconds = this.game.config.guessSeconds;
-    if (!seconds) return;
-    this.game.deadline = Date.now() + seconds * 1000;
-    this.timer = setTimeout(() => {
-      if (this.game.phase === 'guess') {
-        this._reveal();
-        this._sync();
-      }
-    }, seconds * 1000);
+    this.game.deadline = seconds ? Date.now() + seconds * 1000 : null;
+    if (seconds) this.timer = setTimeout(onExpire, seconds * 1000);
+  }
+
+  /** טיימר שלב הרמז - בתום הזמן שולחים "רמז ריק" וממשיכים לניחוש כדי שלא לתקוע את המשחק */
+  _armClueTimer() {
+    this._startTimer(this.game.config.clueSeconds, () => {
+      if (this.game.phase !== 'clue') return;
+      this.game.clue = this.game.clue || '(הזמן נגמר - לא נשלח רמז)';
+      this.game.phase = 'guess';
+      this._armGuessTimer();
+      this._sync();
+    });
+  }
+
+  /** טיימר שלב הניחוש - בתום הזמן חושפים תוצאות עם מה שכבר ננעל */
+  _armGuessTimer() {
+    this._startTimer(this.game.config.guessSeconds, () => {
+      if (this.game.phase !== 'guess') return;
+      this._reveal();
+      this._sync();
+    });
   }
 
   _reveal() {

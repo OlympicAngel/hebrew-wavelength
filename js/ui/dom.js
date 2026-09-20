@@ -29,6 +29,15 @@ export function toast(message) {
   setTimeout(() => node.remove(), 3200);
 }
 
+/** רטט קצר למשוב מישושי - מתעלם בשקט במכשירים/דפדפנים שלא תומכים (כמו iOS Safari) */
+export const vibrate = (ms) => {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    /* לא נתמך - לא קריטי */
+  }
+};
+
 /** שמירה/טעינה של פרופיל השחקן בין משחקים */
 export const storage = {
   get(key, fallback) {

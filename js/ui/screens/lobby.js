@@ -1,7 +1,7 @@
 /** הלובי: מי מחובר, איך מזמינים שחקנים, ומתי מתחילים */
 import { el, on, esc, toast } from '../dom.js';
 import { showQR, scanQR } from '../qr.js';
-import { MAX_PLAYERS, maxSwaps } from '../../game/engine.js';
+import { MAX_PLAYERS, maxSwaps, resolveMode } from '../../game/engine.js';
 import { PACKS } from '../../data/packs.js';
 
 export function lobbyScreen(ctx) {
@@ -112,9 +112,18 @@ export function lobbyScreen(ctx) {
     const names = view.config.packIds.length === PACKS.length
       ? 'כל החפיסות'
       : PACKS.filter((p) => view.config.packIds.includes(p.id)).map((p) => `${p.emoji} ${p.name}`).join(' · ');
+    const effectiveMode = resolveMode(view.config, players);
+    const modeNote =
+      effectiveMode === 'shared'
+        ? players.length === 2
+          ? '🤝 מצב משותף (נכפה עם 2 שחקנים)'
+          : '🤝 מצב משותף'
+        : '🏆 מצב תחרותי';
     root.querySelector('[data-settings]').innerHTML = `<h3>הגדרות</h3>
-      <p class="muted">${view.config.rounds} סיבובים · עד ${maxSwaps(view.config)} החלפות קלף לשחקן ·
-        ${view.config.guessSeconds ? `${view.config.guessSeconds} שניות לניחוש` : 'בלי טיימר'}</p>
+      <p class="muted">${view.config.rounds} סיבובים · עד ${maxSwaps(view.config)} החלפות קלף לשחקן</p>
+      <p class="muted">${view.config.clueSeconds ? `${view.config.clueSeconds} שנ' לרמז` : 'בלי טיימר לרמז'} ·
+        ${view.config.guessSeconds ? `${view.config.guessSeconds} שנ' לניחוש` : 'בלי טיימר לניחוש'}</p>
+      <p class="muted">${modeNote}</p>
       <p class="muted">${esc(names)}</p>`;
 
     const startBtn = root.querySelector('[data-start]');

@@ -31,6 +31,7 @@ export class Dial {
     this.value = 50;
     this.target = null;
     this.needles = null; // null = להציג את המחט שלי; מערך = מחטים מפורשות
+    this.peers = []; // מחטים חיים של שחקנים אחרים (למארח בלבד) - מתווספות מעל needles/הערך שלי
     this.interactive = interactive;
     this.onChange = onChange;
     this.el = el(`
@@ -111,6 +112,12 @@ export class Dial {
     this.render();
   }
 
+  /** @param {{value:number, avatar?:string}[]} peers מחטים חיים שמתווספות תמיד מעל needles (למארח, בזמן אמת) */
+  setPeers(peers) {
+    this.peers = peers;
+    this.render();
+  }
+
   render() {
     const bands = this.el.querySelector('.bands');
     if (this.target == null) bands.innerHTML = '';
@@ -125,7 +132,7 @@ export class Dial {
     }
 
     const marks = this.el.querySelector('.marks');
-    const list = this.needles ?? [{ value: this.value, me: true }];
+    const list = [...this.peers, ...(this.needles ?? [{ value: this.value, me: true }])];
     marks.innerHTML = list
       .map((n) => {
         const [x, y] = point(n.value, R - 6);

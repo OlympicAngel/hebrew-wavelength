@@ -16,7 +16,15 @@ const TARGET_MIN = WEDGE_HALF + 2; // שומר שהטריז כולו יישאר 
 const TARGET_MAX = 100 - TARGET_MIN;
 
 export const MAX_PLAYERS = 12;
-export const DEFAULT_CONFIG = { rounds: 3, packIds: [], guessSeconds: 0 };
+export const DEFAULT_CONFIG = { rounds: 3, packIds: [], guessSeconds: 0, clueSeconds: 0, mode: 'competitive' };
+
+/** רמות המד במצב משותף - מהצטברות ממוצע הנקודות לסיבוב (0-4) */
+export const GAUGE_LEVELS = [
+  { max: 1.5, key: 'bad', label: 'חלש', emoji: '😬' },
+  { max: 2.5, key: 'nice', label: 'נחמד', emoji: '🙂' },
+  { max: 3.5, key: 'super', label: 'מעולה', emoji: '🤩' },
+  { max: Infinity, key: 'extreme', label: 'אגדי', emoji: '🚀' },
+];
 
 /** @returns {number} ניקוד (0-4) לניחוש יחיד מול המטרה */
 export function scoreFor(guess, target) {
@@ -62,8 +70,21 @@ export function createGame() {
     guesses: {}, // playerId -> 0..100
     history: [], // תוצאות סיבובים קודמים לתצוגת הסיכום
     usedCardIds: [],
-    deadline: null, // חותמת זמן לסיום שלב הניחוש (כשיש טיימר)
+    deadline: null, // חותמת זמן לסיום השלב הנוכחי (כשיש טיימר)
+    liveGuesses: {}, // playerId -> ערך רגעי לפני נעילה, לתצוגה חיה אצל המארח בלבד
+    teamScore: 0, // ניקוד קבוצתי מצטבר, רלוונטי רק במצב 'shared'
+    mode: 'competitive', // המצב הפעיל למשחק הנוכחי (נגזר מהגדרות + מספר שחקנים ב-start)
   };
+}
+
+/**
+ * המצב שבו ישוחק המשחק בפועל: 'shared' נכפה אוטומטית עם שני שחקנים מחוברים,
+ * גם אם המארח בחר 'competitive' בהגדרות.
+ * @returns {'competitive'|'shared'}
+ */
+export function resolveMode(config, players) {
+  const connected = players.filter((p) => p.connected).length;
+  return connected === 2 ? 'shared' : config.mode;
 }
 
 /** @returns {object} שחקן חדש עם ערכי ברירת מחדל */
@@ -82,9 +103,19 @@ export function startRound(game) {
   game.target = randomTarget();
   game.clue = '';
   game.guesses = {};
+  game.liveGuesses = {};
   game.phase = 'clue';
   game.deadline = null;
   return game;
+}
+
+/**
+ * האם המצב המשותף חל בפועל על המשחק - נכפה אוטומטית כששני שחקנים בלבד מחוברים,
+ * גם אם המארח בחר "תחרותי" בהגדרות.
+ * @returns {boolean}
+ */
+export function sharedModeActive(game) {
+  return game.config.mode === 'shared' || game.players.filter((p) => p.connected).length === 2;
 }
 
 /** מחליף את הקלף של הסיבוב הנוכחי ומנצל החלפה אחת של הרמז */
@@ -112,6 +143,7 @@ export function allGuessesIn(game) {
 /**
  * סוגר את שלב הניחוש: מחשב ניקוד לכל מנחש, ולרמז את הממוצע (מעוגל).
  * מנחש שלא הספיק לנעול מקבל 0.
+ * במצב תחרותי כל שחקן צובר ניקוד אישי; במצב משותף כל הקבוצה חולקת ניקוד אחד (ממוצע הסיבוב).
  */
 export function revealRound(game) {
   const ids = guesserIds(game);
@@ -121,12 +153,17 @@ export function revealRound(game) {
     return { playerId: id, guess, points };
   });
   const avg = results.length ? Math.round(results.reduce((s, r) => s + r.points, 0) / results.length) : 0;
-  for (const r of results) {
-    const p = game.players.find((x) => x.id === r.playerId);
-    if (p) p.score += r.points;
+
+  if (game.mode === 'shared') {
+    game.teamScore += avg;
+  } else {
+    for (const r of results) {
+      const p = game.players.find((x) => x.id === r.playerId);
+      if (p) p.score += r.points;
+    }
+    const psychic = game.players.find((p) => p.id === game.psychicId);
+    if (psychic) psychic.score += avg;
   }
-  const psychic = game.players.find((p) => p.id === game.psychicId);
-  if (psychic) psychic.score += avg;
 
   game.history.push({
     round: game.round,
@@ -151,6 +188,14 @@ export function advance(game) {
   return startRound(game);
 }
 
+/** @returns {{key:string,label:string,emoji:string,ratio:number}} רמת המד הקבוצתי לפי ממוצע נקודות לסיבוב */
+export function teamGauge(game) {
+  const played = game.history.length || 1;
+  const avg = game.teamScore / played; // 0..4
+  const level = GAUGE_LEVELS.find((l) => avg <= l.max) ?? GAUGE_LEVELS[GAUGE_LEVELS.length - 1];
+  return { ...level, avg, ratio: Math.min(1, avg / 4) };
+}
+
 /** @returns {object[]} טבלת דירוג ממוינת, כולל דירוג משותף לתיקו */
 export function standings(game) {
   const sorted = [...game.players].sort((a, b) => b.score - a.score);
@@ -173,12 +218,16 @@ export function standings(game) {
 export function viewFor(game, playerId) {
   const revealed = game.phase === 'reveal' || game.phase === 'final';
   const isPsychic = playerId === game.psychicId;
+  const isHost = game.players.find((p) => p.id === playerId)?.isHost ?? false;
   return {
     ...game,
     target: revealed || (isPsychic && game.phase !== 'lobby') ? game.target : null,
-    guesses: revealed
+    // המארח רואה ניחושים אמיתיים גם לפני החשיפה (לתצוגה חיה); לשאר - רק "true" כדי לדעת מי נעל בלי לחשוף ערך
+    guesses: revealed || isHost
       ? game.guesses
       : Object.fromEntries(Object.keys(game.guesses).map((id) => [id, id === playerId ? game.guesses[id] : true])),
+    // תזוזות חיות (לפני נעילה) נחשפות רק למארח - כדי לא לתת יתרון להצצה לשאר המנחשים
+    liveGuesses: revealed || !isHost ? {} : game.liveGuesses,
     you: playerId,
   };
 }
