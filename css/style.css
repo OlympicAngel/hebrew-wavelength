@@ -276,6 +276,74 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
 .gauge-fill.gauge-super { background: var(--yellow); }
 .gauge-fill.gauge-extreme { background: var(--orange); }
 
+/* ------------------------------------------------------------ חבלה (מצב תחרותי) */
+
+.bomb-panel {
+  background: rgba(224, 75, 75, 0.12);
+  border: 2px solid rgba(224, 75, 75, 0.4);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bomb-row { display: flex; align-items: center; gap: 10px; }
+.bomb-label { flex: 1; font-size: 0.82rem; color: var(--cream-dim); }
+.bomb-btn {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  background: rgba(224, 75, 75, 0.35);
+  color: var(--cream);
+  filter: grayscale(1);
+}
+.bomb-btn.armed { background: var(--red); filter: none; animation: bomb-pulse 1s ease-in-out infinite; }
+.bomb-btn:disabled { cursor: not-allowed; }
+.bomb-window { height: 6px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); overflow: hidden; }
+.bomb-window-fill { height: 100%; background: var(--red); transition: width 0.2s linear; }
+
+@keyframes bomb-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(224, 75, 75, 0.55); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(224, 75, 75, 0); }
+}
+
+.bomb-flash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 90, 40, 0.55), rgba(224, 75, 75, 0.15) 55%, transparent 78%);
+  animation: bomb-flash 0.9s ease-out forwards;
+}
+.bomb-banner {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+  animation: bomb-pop 0.9s ease-out forwards;
+}
+@keyframes bomb-flash { from { opacity: 1; } to { opacity: 0; } }
+@keyframes bomb-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  20% { transform: scale(1.15); opacity: 1; }
+  35% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+#app.shake { animation: bomb-shake 0.5s; }
+@keyframes bomb-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+
 .code-box {
   font-size: 2.6rem;
   font-weight: 800;

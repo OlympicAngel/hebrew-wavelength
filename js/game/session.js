@@ -73,10 +73,11 @@ export class HostSession extends Emitter {
 
       case 'start':
         if (game.phase !== 'lobby' || game.players.filter((p) => p.connected).length < 2) return;
-        game.players.forEach((p) => ((p.score = 0), (p.swapsUsed = 0)));
+        game.players.forEach((p) => ((p.score = 0), (p.swapsUsed = 0), (p.bombUsed = false)));
         game.round = 0;
         game.history = [];
         game.teamScore = 0;
+        game.lastBomb = null;
         game.mode = G.resolveMode(game.config, game.players);
         G.startRound(game);
         this._armClueTimer();
@@ -84,6 +85,11 @@ export class HostSession extends Emitter {
 
       case 'swap':
         G.swapCard(game, fromId);
+        break;
+
+      // חבלה: מחליפה קלף לכולם ומחזירה זמן, זמינה פעם אחת לשחקן לכל המשחק (ראו useBomb)
+      case 'bomb':
+        if (G.useBomb(game, fromId)) this._rescheduleClueTimer();
         break;
 
       case 'clue': {
@@ -122,7 +128,7 @@ export class HostSession extends Emitter {
         game.round = 0;
         game.history = [];
         game.teamScore = 0;
-        game.players.forEach((p) => ((p.score = 0), (p.swapsUsed = 0)));
+        game.players.forEach((p) => ((p.score = 0), (p.swapsUsed = 0), (p.bombUsed = false)));
         break;
 
       case 'kick': {
@@ -180,13 +186,22 @@ export class HostSession extends Emitter {
 
   /** טיימר שלב הרמז - בתום הזמן שולחים "רמז ריק" וממשיכים לניחוש כדי שלא לתקוע את המשחק */
   _armClueTimer() {
-    this._startTimer(this.game.config.clueSeconds, () => {
-      if (this.game.phase !== 'clue') return;
-      this.game.clue = this.game.clue || '(הזמן נגמר - לא נשלח רמז)';
-      this.game.phase = 'guess';
-      this._armGuessTimer();
-      this._sync();
-    });
+    this._startTimer(this.game.config.clueSeconds, this._onClueExpire);
+  }
+
+  _onClueExpire = () => {
+    if (this.game.phase !== 'clue') return;
+    this.game.clue = this.game.clue || '(הזמן נגמר - לא נשלח רמז)';
+    this.game.phase = 'guess';
+    this._armGuessTimer();
+    this._sync();
+  };
+
+  /** מתזמן מחדש את תום הרמז לפי game.deadline הקיים בלי לאפס אותו - למשל אחרי שחבלה החזירה זמן */
+  _rescheduleClueTimer() {
+    clearTimeout(this.timer);
+    const ms = this.game.deadline - Date.now();
+    if (ms > 0) this.timer = setTimeout(this._onClueExpire, ms);
   }
 
   /** טיימר שלב הניחוש - בתום הזמן חושפים תוצאות עם מה שכבר ננעל */

@@ -1,6 +1,7 @@
 /** נקודת הכניסה: מחזיקה את הסשן הפעיל ומחליפה מסכים לפי שלב המשחק */
 import { $, toast, storage, vibrate } from './ui/dom.js';
 import { HostSession, ClientSession } from './game/session.js';
+import { PACKS } from './data/packs.js';
 import { homeScreen } from './ui/screens/home.js';
 import { rulesScreen } from './ui/screens/rules.js';
 import { setupScreen } from './ui/screens/setup.js';
@@ -37,10 +38,10 @@ const ctx = {
     ctx.session?.act(type, payload);
   },
 
-  async startHost(transportKind, config) {
+  async startHost(transportKind) {
     const session = new HostSession(transportKind, ctx.profile);
     await session.start();
-    session.act('config', { config });
+    session.act('config', { config: { packIds: PACKS.map((p) => p.id) } });
     bind(session);
   },
 

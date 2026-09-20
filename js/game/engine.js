@@ -74,6 +74,8 @@ export function createGame() {
     liveGuesses: {}, // playerId -> ערך רגעי לפני נעילה, לתצוגה חיה אצל המארח בלבד
     teamScore: 0, // ניקוד קבוצתי מצטבר, רלוונטי רק במצב 'shared'
     mode: 'competitive', // המצב הפעיל למשחק הנוכחי (נגזר מהגדרות + מספר שחקנים ב-start)
+    bombUsedRound: false, // האם כבר נוצלה חבלה בסיבוב הנוכחי (מוגבל לאחת לסיבוב, לא משנה מי)
+    lastBomb: null, // {playerId, at} - אירוע החבלה האחרון, לאנימציית "פיצוץ" אצל כל השחקנים
   };
 }
 
@@ -89,7 +91,7 @@ export function resolveMode(config, players) {
 
 /** @returns {object} שחקן חדש עם ערכי ברירת מחדל */
 export function createPlayer(id, name, avatar) {
-  return { id, name, avatar, score: 0, swapsUsed: 0, connected: true, isHost: false };
+  return { id, name, avatar, score: 0, swapsUsed: 0, connected: true, isHost: false, bombUsed: false };
 }
 
 /** מתחיל סיבוב חדש (או את הראשון) ומעדכן את המצב במקום */
@@ -106,6 +108,7 @@ export function startRound(game) {
   game.liveGuesses = {};
   game.phase = 'clue';
   game.deadline = null;
+  game.bombUsedRound = false;
   return game;
 }
 
@@ -126,6 +129,35 @@ export function swapCard(game, playerId) {
   player.swapsUsed += 1;
   game.card = drawCard(game.config, game.usedCardIds);
   game.target = randomTarget();
+  return true;
+}
+
+/** חלק מזמן הרמז שבו אפשר לחבל: הפעולה זמינה רק ב-20% הראשונים של הטיימר */
+const BOMB_WINDOW_RATIO = 0.2;
+/** כמה זמן חוזר לקבוצה כפיצוי על ההפרעה, כאחוז מכלל זמן הרמז */
+const BOMB_TIME_REFUND_RATIO = 0.1;
+
+/**
+ * ניצול "פצצת חבלה" - זמינה במצב תחרותי בלבד: לכל שחקן יש חבלה אחת לכל המשחק,
+ * וניתן להפעיל אותה רק ב-20% הראשונים של זמן הרמז (ורק אם עדיין לא נוצלה חבלה באותו סיבוב,
+ * לא משנה על ידי מי). ההפעלה מחליפה קלף לכולם ומחזירה 10% מזמן הרמז כפיצוי.
+ * @returns {boolean} האם החבלה בוצעה בפועל
+ */
+export function useBomb(game, playerId) {
+  const player = game.players.find((p) => p.id === playerId);
+  if (!player || player.bombUsed || game.bombUsedRound) return false;
+  if (game.mode !== 'competitive' || game.phase !== 'clue' || !game.config.clueSeconds || game.deadline == null) return false;
+
+  const totalMs = game.config.clueSeconds * 1000;
+  const elapsed = totalMs - (game.deadline - Date.now());
+  if (elapsed > totalMs * BOMB_WINDOW_RATIO) return false;
+
+  player.bombUsed = true;
+  game.bombUsedRound = true;
+  game.card = drawCard(game.config, game.usedCardIds);
+  game.target = randomTarget();
+  game.deadline += totalMs * BOMB_TIME_REFUND_RATIO;
+  game.lastBomb = { playerId, at: Date.now() };
   return true;
 }
 
@@ -182,6 +214,8 @@ export function revealRound(game) {
 /** מעביר לסיבוב הבא, או מסיים את המשחק אם הושלמו כל הסיבובים */
 export function advance(game) {
   if (game.round >= game.config.rounds) {
+    // בונוס למי ששמר על הפצצה שלו לכל המשחק (מצב תחרותי בלבד)
+    if (game.mode === 'competitive') for (const p of game.players) if (!p.bombUsed) p.score += 1;
     game.phase = 'final';
     return game;
   }

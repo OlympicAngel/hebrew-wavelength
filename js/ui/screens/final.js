@@ -65,6 +65,7 @@ function competitiveHtml(view) {
           <span>${MEDALS[p.rank - 1] ?? `${p.rank}.`}</span>
           <span style="font-size:1.3rem">${p.avatar}</span>
           <span class="name">${esc(p.name)}${p.id === view.you ? ' (אתם)' : ''}</span>
+          ${p.bombUsed === false ? '<span class="badge" title="לא ניצל/ה את החבלה">🛡️ +1</span>' : ''}
           <span class="score">${p.score}</span>
         </div>`,
     )
@@ -81,7 +82,7 @@ function sharedHtml(view) {
       <h3>הישג הקבוצה</h3>
       <div style="font-size:4rem;line-height:1">${gauge.emoji}</div>
       <div class="big-num">${gauge.label}</div>
-      <div class="gauge-bar"><div class="gauge-fill gauge-${gauge.key}" style="width:${Math.round(gauge.ratio * 100)}%"></div></div>
+      <div class="gauge-bar" dir="ltr"><div class="gauge-fill gauge-${gauge.key}" style="width:${Math.round(gauge.ratio * 100)}%"></div></div>
       <div class="row between muted" dir="ltr" style="font-size:.78rem"><span>חלש</span><span>נחמד</span><span>מעולה</span><span>אגדי</span></div>
       <p class="muted">ניקוד קבוצתי: ${view.teamScore} נקודות ב-${view.history.length} סיבובים</p>
     </div>`;

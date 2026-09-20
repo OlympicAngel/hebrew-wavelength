@@ -9,6 +9,7 @@ import { PACKS } from '../../data/packs.js';
 
 const packById = Object.fromEntries(PACKS.map((p) => [p.id, p]));
 const MOVE_THROTTLE_MS = 70; // תדירות שידור תזוזת המחט החיה למארח - מספיק חלק, לא מציף את הרשת
+const BOMB_WINDOW_RATIO = 0.2; // חייב להתאים ל-BOMB_WINDOW_RATIO ב-engine.js
 
 export function roundScreen(ctx) {
   let myGuess = 50;
@@ -17,6 +18,7 @@ export function roundScreen(ctx) {
   let tick = null;
   let lastMoveSent = 0;
   let lastVibrateValue = null;
+  let lastBombAt = 0; // חותמת האירוע האחרון שכבר הוצג - game.lastBomb מתאפס לכל משחק חדש (ראו session.js)
 
   const dial = new Dial({
     interactive: false,
@@ -51,6 +53,8 @@ export function roundScreen(ctx) {
         <div class="text" data-clue-text></div>
       </div>
 
+      <div data-bomb-slot></div>
+
       <div data-dial-slot></div>
       <div class="spectrum"><span data-low></span><span data-high></span></div>
 
@@ -74,10 +78,62 @@ export function roundScreen(ctx) {
     render(currentView);
   });
   on(root, 'click', '[data-next]', () => ctx.act('next'));
+  on(root, 'click', '[data-bomb-btn]', () => ctx.act('bomb'));
 
   /* ------------------------------------------------------------- תצוגה */
 
   let currentView = null;
+
+  /** @returns {string} פאנל החבלה - מוצג לכולם בשלב הרמז, במצב תחרותי עם טיימר רמז מוגדר בלבד */
+  function bombHtml(view) {
+    if (view.mode !== 'competitive' || !view.config.clueSeconds || view.phase !== 'clue') return '';
+    const me = view.players.find((p) => p.id === view.you);
+    if (!me) return '';
+    return `<div class="bomb-panel" data-bomb>
+        <div class="bomb-row">
+          <span class="bomb-label">💣 חבלה: מחליפים את הכרטיס לכולם, ומחזירים 10% מזמן הרמז</span>
+          <button class="bomb-btn" data-bomb-btn>💣</button>
+        </div>
+        <div class="bomb-window"><div class="bomb-window-fill" data-bomb-fill></div></div>
+        <p class="muted center" data-bomb-status style="font-size:.78rem"></p>
+      </div>`;
+  }
+
+  /** מעדכן כל טיק את מד החלון של החבלה (זמין רק ב-20% הראשונים של זמן הרמז) */
+  function paintBomb(view) {
+    const panel = root.querySelector('[data-bomb]');
+    if (!panel || !view.deadline) return;
+    const totalMs = view.config.clueSeconds * 1000;
+    const windowMs = totalMs * BOMB_WINDOW_RATIO;
+    const elapsed = totalMs - (view.deadline - Date.now());
+    const left = Math.max(0, windowMs - elapsed);
+    panel.querySelector('[data-bomb-fill]').style.width = `${Math.min(100, (left / windowMs) * 100)}%`;
+
+    const me = view.players.find((p) => p.id === view.you);
+    const usable = left > 0 && !me?.bombUsed && !view.bombUsedRound;
+    const btn = panel.querySelector('[data-bomb-btn]');
+    btn.disabled = !usable;
+    btn.classList.toggle('armed', usable);
+
+    panel.querySelector('[data-bomb-status]').textContent = me?.bombUsed
+      ? 'כבר ניצלתם את החבלה שלכם למשחק הזה 💤'
+      : view.bombUsedRound
+        ? 'כבר נוצלה חבלה בסיבוב הזה'
+        : left > 0
+          ? `נותרו ${Math.ceil(left / 1000)} שנ' לחבל`
+          : 'הזמן לחבלה עבר';
+  }
+
+  /** אפקט "פיצוץ" למסך כולו - רטט, רעידה ודגל אדום, כשמישהו מפעיל חבלה */
+  function bombBlast(message) {
+    const app = document.getElementById('app');
+    app.classList.add('shake');
+    setTimeout(() => app.classList.remove('shake'), 500);
+    const overlay = el(`<div class="bomb-flash-overlay"><div class="bomb-banner">💥 ${esc(message)}</div></div>`);
+    document.body.append(overlay);
+    vibrate([40, 60, 120]);
+    setTimeout(() => overlay.remove(), 900);
+  }
 
   /** @returns {string} HTML של אזור הכפתורים, לפי השלב והתפקיד */
   function controlsHtml(view, isPsychic) {
@@ -158,6 +214,14 @@ export function roundScreen(ctx) {
       dial.setValue(50);
     }
 
+    // אירוע חבלה חדש - אפקט "פיצוץ" לכולם
+    if (view.lastBomb && view.lastBomb.at > lastBombAt) {
+      lastBombAt = view.lastBomb.at;
+      const who = view.players.find((p) => p.id === view.lastBomb.playerId);
+      bombBlast(`${who?.name ?? 'שחקן'} חיבל/ה בכרטיס!`);
+    }
+
+    root.querySelector('[data-bomb-slot]').innerHTML = bombHtml(view);
     root.querySelector('[data-round]').textContent = `סיבוב ${view.round}/${view.config.rounds}`;
     const pack = packById[view.card?.packId];
     root.querySelector('[data-category]').textContent = pack ? `${pack.emoji} ${pack.name}` : '';
@@ -218,6 +282,7 @@ export function roundScreen(ctx) {
       const left = Math.max(0, Math.ceil((view.deadline - Date.now()) / 1000));
       pill.textContent = `⏱ ${left}`;
       pill.classList.toggle('warn', left <= 10);
+      if (view.phase === 'clue') paintBomb(view);
       if (left <= 0) clearInterval(tick);
     };
     paint();
