@@ -219,15 +219,16 @@ export function viewFor(game, playerId) {
   const revealed = game.phase === 'reveal' || game.phase === 'final';
   const isPsychic = playerId === game.psychicId;
   const isHost = game.players.find((p) => p.id === playerId)?.isHost ?? false;
+  // מי שרשאי לראות ניחושים/תזוזות חיות של אחרים לפני הנעילה: המארח, נותן הרמז (שלא מנחש בעצמו),
+  // ובמצב משותף - כולם, כי אין שם תחרות שצריך להגן עליה
+  const canPeek = isHost || isPsychic || game.mode === 'shared';
   return {
     ...game,
     target: revealed || (isPsychic && game.phase !== 'lobby') ? game.target : null,
-    // המארח רואה ניחושים אמיתיים גם לפני החשיפה (לתצוגה חיה); לשאר - רק "true" כדי לדעת מי נעל בלי לחשוף ערך
-    guesses: revealed || isHost
+    guesses: revealed || canPeek
       ? game.guesses
       : Object.fromEntries(Object.keys(game.guesses).map((id) => [id, id === playerId ? game.guesses[id] : true])),
-    // תזוזות חיות (לפני נעילה) נחשפות רק למארח - כדי לא לתת יתרון להצצה לשאר המנחשים
-    liveGuesses: revealed || !isHost ? {} : game.liveGuesses,
+    liveGuesses: revealed || !canPeek ? {} : game.liveGuesses,
     you: playerId,
   };
 }

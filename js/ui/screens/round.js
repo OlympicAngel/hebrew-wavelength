@@ -190,10 +190,11 @@ export function roundScreen(ctx) {
       );
     } else {
       dial.setNeedles(isPsychic ? [] : null);
-      // המארח בלבד רואה את תזוזות שאר המנחשים בזמן אמת, לפני שהם נועלים
+      // תזוזות חיות של שאר המנחשים לפני נעילה: למארח, לנותן הרמז, ובמצב משותף - לכולם
       const isHostView = view.players.find((p) => p.id === view.you)?.isHost;
+      const canPeek = isHostView || isPsychic || view.mode === 'shared';
       dial.setPeers(
-        isHostView && view.phase === 'guess'
+        canPeek && view.phase === 'guess'
           ? view.players
               .filter((p) => p.connected && p.id !== view.psychicId && p.id !== view.you)
               .map((p) => ({ value: view.guesses[p.id] ?? view.liveGuesses[p.id], avatar: p.avatar }))
