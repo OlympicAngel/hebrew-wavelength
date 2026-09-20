@@ -84,9 +84,10 @@ export function roundScreen(ctx) {
 
   let currentView = null;
 
-  /** @returns {string} פאנל החבלה - מוצג לכולם בשלב הרמז, במצב תחרותי עם טיימר רמז מוגדר בלבד */
+  /** @returns {string} פאנל החבלה - מוצג למנחשים בשלב הרמז, במצב תחרותי עם טיימר רמז מוגדר בלבד (לא לנותן הרמז) */
   function bombHtml(view) {
     if (view.mode !== 'competitive' || !view.config.clueSeconds || view.phase !== 'clue') return '';
+    if (view.you === view.psychicId) return '';
     const me = view.players.find((p) => p.id === view.you);
     if (!me) return '';
     return `<div class="bomb-panel" data-bomb>
@@ -184,10 +185,10 @@ export function roundScreen(ctx) {
   }
 
   const psychicName = (view) => view.players.find((p) => p.id === view.psychicId)?.name ?? '';
+  const RANK_MEDALS = ['🥇', '🥈', '🥉'];
 
-  /** שורת השחקנים בתחתית - מי הרמז ומי כבר נעל ניחוש */
+  /** שורת השחקנים בתחתית - מי הרמז ומי כבר נעל ניחוש (מצב משותף, בלי ניקוד אישי) */
   function peopleHtml(view) {
-    const shared = view.mode === 'shared';
     return `<div class="players">${view.players
       .map((p) => {
         const isPsychic = p.id === view.psychicId;
@@ -196,10 +197,29 @@ export function roundScreen(ctx) {
             <span style="font-size:1.25rem">${p.avatar}</span>
             <span class="name">${esc(p.name)}</span>
             ${isPsychic ? '<span class="badge psychic">הרמז</span>' : ready ? '<span class="badge ready">מוכן</span>' : ''}
-            ${shared ? '' : `<span class="score">${p.score}</span>`}
           </div>`;
       })
       .join('')}</div>`;
+  }
+
+  /** דירוג חי עם פס ניקוד יחסי לכל שחקן - מצב תחרותי, כדי שהמתח יורגש כבר באמצע המשחק */
+  function leaderboardHtml(view) {
+    const sorted = [...view.players].sort((a, b) => b.score - a.score);
+    const maxScore = Math.max(1, ...sorted.map((p) => p.score));
+    return `<h3>🏆 דירוג חי</h3>
+      <div class="mini-board">${sorted
+        .map((p, i) => {
+          const isPsychic = p.id === view.psychicId;
+          const ready = view.guesses[p.id] != null;
+          return `<div class="mini-row ${p.id === view.you ? 'me' : ''} ${p.score > 0 && p.score === sorted[0].score ? 'leading' : ''} ${p.connected ? '' : 'off'}">
+              <span class="mini-rank">${RANK_MEDALS[i] ?? i + 1}</span>
+              <span class="mini-avatar">${p.avatar}</span>
+              <span class="mini-name">${esc(p.name)}${isPsychic ? ' 🎙️' : ready ? ' ✅' : ''}</span>
+              <div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.round((p.score / maxScore) * 100)}%"></div></div>
+              <span class="mini-score">${p.score}</span>
+            </div>`;
+        })
+        .join('')}</div>`;
   }
 
   function render(view) {
@@ -268,7 +288,7 @@ export function roundScreen(ctx) {
     }
 
     root.querySelector('[data-controls]').innerHTML = controlsHtml(view, isPsychic);
-    root.querySelector('[data-people]').innerHTML = peopleHtml(view);
+    root.querySelector('[data-people]').innerHTML = view.mode === 'shared' ? peopleHtml(view) : leaderboardHtml(view);
     startTimer(view);
   }
 

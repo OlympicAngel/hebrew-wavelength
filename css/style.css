@@ -212,6 +212,30 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
 .player.off { opacity: 0.45; }
 .player .score { margin-inline-start: auto; font-weight: 800; font-size: 1.1rem; }
 
+/* ------------------------------------------------------------ דירוג חי (מצב תחרותי, באמצע המשחק) */
+
+.mini-board { display: flex; flex-direction: column; gap: 6px; }
+.mini-row {
+  display: grid;
+  grid-template-columns: 22px auto 1fr 60px 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.3s ease;
+}
+.mini-row.me { outline: 2px solid var(--orange); background: rgba(242, 100, 59, 0.14); }
+.mini-row.leading { background: rgba(247, 201, 72, 0.16); }
+.mini-row.off { opacity: 0.45; }
+.mini-rank { text-align: center; font-size: 0.95rem; }
+.mini-avatar { font-size: 1.15rem; }
+.mini-name { font-weight: 700; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-bar { height: 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); overflow: hidden; }
+.mini-bar-fill { height: 100%; border-radius: 999px; background: var(--orange); transition: width 0.5s ease; }
+.mini-row.leading .mini-bar-fill { background: var(--yellow); }
+.mini-score { font-weight: 800; text-align: center; }
+
 /* ------------------------------------------------------------ באנר הרמז */
 
 .clue-banner {

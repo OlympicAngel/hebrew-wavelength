@@ -138,7 +138,7 @@ const BOMB_WINDOW_RATIO = 0.2;
 const BOMB_TIME_REFUND_RATIO = 0.1;
 
 /**
- * ניצול "פצצת חבלה" - זמינה במצב תחרותי בלבד: לכל שחקן יש חבלה אחת לכל המשחק,
+ * ניצול "פצצת חבלה" - זמינה במצב תחרותי בלבד, לכל מנחש (לא לנותן הרמז עצמו) פעם אחת לכל המשחק,
  * וניתן להפעיל אותה רק ב-20% הראשונים של זמן הרמז (ורק אם עדיין לא נוצלה חבלה באותו סיבוב,
  * לא משנה על ידי מי). ההפעלה מחליפה קלף לכולם ומחזירה 10% מזמן הרמז כפיצוי.
  * @returns {boolean} האם החבלה בוצעה בפועל
@@ -146,6 +146,7 @@ const BOMB_TIME_REFUND_RATIO = 0.1;
 export function useBomb(game, playerId) {
   const player = game.players.find((p) => p.id === playerId);
   if (!player || player.bombUsed || game.bombUsedRound) return false;
+  if (playerId === game.psychicId) return false; // נותן הרמז לא יכול לחבל בקלף של עצמו
   if (game.mode !== 'competitive' || game.phase !== 'clue' || !game.config.clueSeconds || game.deadline == null) return false;
 
   const totalMs = game.config.clueSeconds * 1000;
