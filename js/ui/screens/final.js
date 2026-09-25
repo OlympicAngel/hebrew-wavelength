@@ -1,4 +1,4 @@
-/** מסך הסיום: פודיום/מד קבוצתי (לפי המצב), וסיכום הסיבובים */
+/** מסך הסיום: פודיום/מד קבוצתי (לפי המצב), וסיכום התורות */
 import { el, on, esc } from '../dom.js';
 import { standings, teamGauge } from '../../game/engine.js';
 
@@ -9,7 +9,7 @@ export function finalScreen(ctx) {
     <div class="stack fade-in">
       <div class="logo"><h1>🏆 סוף<span class="wave"> המשחק</span></h1></div>
       <div data-scoreboard></div>
-      <div class="card"><h3>סיכום הסיבובים</h3><div class="stack" data-history></div></div>
+      <div class="card"><h3>סיכום התורות</h3><div class="stack" data-history></div></div>
       <div data-actions class="stack"></div>
     </div>`);
 
@@ -84,6 +84,6 @@ function sharedHtml(view) {
       <div class="big-num">${gauge.label}</div>
       <div class="gauge-bar" dir="ltr"><div class="gauge-fill gauge-${gauge.key}" style="width:${Math.round(gauge.ratio * 100)}%"></div></div>
       <div class="row between muted" dir="ltr" style="font-size:.78rem"><span>חלש</span><span>נחמד</span><span>מעולה</span><span>אגדי</span></div>
-      <p class="muted">ניקוד קבוצתי: ${view.teamScore} נקודות ב-${view.history.length} סיבובים</p>
+      <p class="muted">ניקוד קבוצתי: ${view.teamScore} נקודות ב-${view.history.length} תורות</p>
     </div>`;
 }

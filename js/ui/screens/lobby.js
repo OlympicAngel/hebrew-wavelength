@@ -27,14 +27,15 @@ function timerPicker(key, label, current) {
 }
 
 /** @returns {string} פאנל ההגדרות המלא - עריכה חיה למארח, מול רשימת השחקנים שכבר הצטרפו */
-function settingsEditorHtml(config) {
+function settingsEditorHtml(config, players) {
+  const totalTurns = config.rounds * Math.max(1, players.length);
   return `<h3>הגדרות</h3>
     <div>
-      <p class="muted">מספר סיבובים</p>
+      <p class="muted">מספר סיבובים (כל שחקן נותן רמז פעם אחת בכל סיבוב)</p>
       <div class="row wrap" data-rounds>
         ${ROUND_OPTIONS.map((n) => `<button class="chip ${n === config.rounds ? 'on' : ''}" data-round="${n}">${n}</button>`).join('')}
       </div>
-      <p class="muted">כל שחקן יוכל להחליף קלף עד <b>${maxSwaps(config)}</b> פעמים במשחק.</p>
+      <p class="muted">עם ${players.length} שחקנים זה <b>${totalTurns}</b> תורות בסה"כ · עד <b>${maxSwaps(config)}</b> החלפות קלף לשחקן.</p>
     </div>
     ${timerPicker('clue', '⏱️ זמן לחשוב על רמז', config.clueSeconds)}
     ${timerPicker('guess', '⏱️ זמן לניחוש', config.guessSeconds)}
@@ -74,8 +75,9 @@ function settingsSummaryHtml(view, players) {
         ? '🤝 מצב משותף (נכפה עם 2 שחקנים)'
         : '🤝 מצב משותף'
       : '🏆 מצב תחרותי (עם חבלה!)';
+  const totalTurns = view.config.rounds * Math.max(1, players.length);
   return `<h3>הגדרות</h3>
-    <p class="muted">${view.config.rounds} סיבובים · עד ${maxSwaps(view.config)} החלפות קלף לשחקן</p>
+    <p class="muted">${view.config.rounds} סיבובים (${totalTurns} תורות) · עד ${maxSwaps(view.config)} החלפות קלף לשחקן</p>
     <p class="muted">${view.config.clueSeconds ? `${view.config.clueSeconds} שנ' לרמז` : 'בלי טיימר לרמז'} ·
       ${view.config.guessSeconds ? `${view.config.guessSeconds} שנ' לניחוש` : 'בלי טיימר לניחוש'}</p>
     <p class="muted">${modeNote}</p>
@@ -214,7 +216,7 @@ export function lobbyScreen(ctx) {
       .join('');
 
     root.querySelector('[data-settings]').innerHTML = isHost
-      ? settingsEditorHtml(view.config)
+      ? settingsEditorHtml(view.config, players)
       : settingsSummaryHtml(view, players);
 
     const startBtn = root.querySelector('[data-start]');

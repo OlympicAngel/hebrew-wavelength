@@ -79,6 +79,8 @@ export class HostSession extends Emitter {
         game.teamScore = 0;
         game.lastBomb = null;
         game.mode = G.resolveMode(game.config, game.players);
+        // "סיבוב" = סבב מלא שבו כל שחקן מחובר נותן רמז פעם אחת, לא תור בודד
+        game.totalTurns = game.config.rounds * game.players.filter((p) => p.connected).length;
         G.startRound(game);
         this._armClueTimer();
         break;

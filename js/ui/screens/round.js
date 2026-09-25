@@ -9,7 +9,11 @@ import { PACKS } from '../../data/packs.js';
 
 const packById = Object.fromEntries(PACKS.map((p) => [p.id, p]));
 const MOVE_THROTTLE_MS = 70; // תדירות שידור תזוזת המחט החיה למארח - מספיק חלק, לא מציף את הרשת
-const BOMB_WINDOW_RATIO = 0.2; // חייב להתאים ל-BOMB_WINDOW_RATIO ב-engine.js
+const BOMB_WINDOW_RATIO = 0.5; // חייב להתאים ל-BOMB_WINDOW_RATIO ב-engine.js
+
+// מחוץ ל-roundScreen בכוונה: app.js יוצר מסך חדש בכל מעבר שלב (רמז/ניחוש/חשיפה), אז משתנה מקומי
+// היה מתאפס בכל מעבר ומציג שוב את אפקט ה"פיצוץ" על אירוע ישן - כאן הוא שורד בין יצירות המסך.
+let lastBombAt = 0;
 
 export function roundScreen(ctx) {
   let myGuess = 50;
@@ -18,7 +22,6 @@ export function roundScreen(ctx) {
   let tick = null;
   let lastMoveSent = 0;
   let lastVibrateValue = null;
-  let lastBombAt = 0; // חותמת האירוע האחרון שכבר הוצג - game.lastBomb מתאפס לכל משחק חדש (ראו session.js)
 
   const dial = new Dial({
     interactive: false,
@@ -185,7 +188,7 @@ export function roundScreen(ctx) {
       </div>
       ${rows}
       ${ctx.session.isHost
-        ? `<button class="btn-primary btn-block" data-next>${view.round >= view.config.rounds ? 'לתוצאות הסופיות 🏆' : 'לסיבוב הבא ←'}</button>`
+        ? `<button class="btn-primary btn-block" data-next>${view.round >= view.totalTurns ? 'לתוצאות הסופיות 🏆' : 'לתור הבא ←'}</button>`
         : '<p class="center muted">ממתינים שהמארח ימשיך...</p>'}`;
   }
 
@@ -247,7 +250,7 @@ export function roundScreen(ctx) {
     }
 
     root.querySelector('[data-bomb-slot]').innerHTML = bombHtml(view);
-    root.querySelector('[data-round]').textContent = `סיבוב ${view.round}/${view.config.rounds}`;
+    root.querySelector('[data-round]').textContent = `תור ${view.round}/${view.totalTurns}`;
     const pack = packById[view.card?.packId];
     root.querySelector('[data-category]').textContent = pack ? `${pack.emoji} ${pack.name}` : '';
     root.querySelector('[data-score]').textContent =
@@ -279,9 +282,8 @@ export function roundScreen(ctx) {
       );
     } else {
       dial.setNeedles(isPsychic ? [] : null);
-      // תזוזות חיות של שאר המנחשים לפני נעילה: למארח, לנותן הרמז, ובמצב משותף - לכולם
-      const isHostView = view.players.find((p) => p.id === view.you)?.isHost;
-      const canPeek = isHostView || isPsychic || view.mode === 'shared';
+      // תזוזות חיות של שאר המנחשים לפני נעילה: רק לנותן הרמז הנוכחי (גם אם הוא לא המארח), ובמצב משותף - לכולם
+      const canPeek = isPsychic || view.mode === 'shared';
       dial.setPeers(
         canPeek && view.phase === 'guess'
           ? view.players

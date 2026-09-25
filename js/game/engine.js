@@ -62,7 +62,8 @@ export function createGame() {
     phase: 'lobby', // lobby | clue | guess | reveal | final
     config: { ...DEFAULT_CONFIG },
     players: [],
-    round: 0,
+    round: 0, // מספר התור הנוכחי (כל תור = שחקן אחד נותן רמז) - לא להתבלבל עם config.rounds
+    totalTurns: 0, // config.rounds * מספר השחקנים בהתחלה - כדי ש"סיבוב" יהיה סבב מלא ולא תור בודד
     psychicId: null,
     card: null,
     target: null,
@@ -132,14 +133,14 @@ export function swapCard(game, playerId) {
   return true;
 }
 
-/** חלק מזמן הרמז שבו אפשר לחבל: הפעולה זמינה רק ב-20% הראשונים של הטיימר */
-const BOMB_WINDOW_RATIO = 0.2;
+/** חלק מזמן הרמז שבו אפשר לחבל: הפעולה זמינה רק ב-50% הראשונים של הטיימר */
+const BOMB_WINDOW_RATIO = 0.5;
 /** כמה זמן חוזר לקבוצה כפיצוי על ההפרעה, כאחוז מכלל זמן הרמז */
 const BOMB_TIME_REFUND_RATIO = 0.1;
 
 /**
  * ניצול "פצצת חבלה" - זמינה במצב תחרותי בלבד, לכל מנחש (לא לנותן הרמז עצמו) פעם אחת לכל המשחק,
- * וניתן להפעיל אותה רק ב-20% הראשונים של זמן הרמז (ורק אם עדיין לא נוצלה חבלה באותו סיבוב,
+ * וניתן להפעיל אותה רק ב-50% הראשונים של זמן הרמז (ורק אם עדיין לא נוצלה חבלה באותו סיבוב,
  * לא משנה על ידי מי). ההפעלה מחליפה קלף לכולם ומחזירה 10% מזמן הרמז כפיצוי.
  * @returns {boolean} האם החבלה בוצעה בפועל
  */
@@ -212,9 +213,9 @@ export function revealRound(game) {
   return game;
 }
 
-/** מעביר לסיבוב הבא, או מסיים את המשחק אם הושלמו כל הסיבובים */
+/** מעביר לתור הבא, או מסיים את המשחק אם הושלמו כל הסיבובים (config.rounds סבבים מלאים, לא תורות בודדים) */
 export function advance(game) {
-  if (game.round >= game.config.rounds) {
+  if (game.round >= game.totalTurns) {
     // בונוס למי ששמר על הפצצה שלו לכל המשחק (מצב תחרותי בלבד)
     if (game.mode === 'competitive') for (const p of game.players) if (!p.bombUsed) p.score += 1;
     game.phase = 'final';
@@ -253,10 +254,9 @@ export function standings(game) {
 export function viewFor(game, playerId) {
   const revealed = game.phase === 'reveal' || game.phase === 'final';
   const isPsychic = playerId === game.psychicId;
-  const isHost = game.players.find((p) => p.id === playerId)?.isHost ?? false;
-  // מי שרשאי לראות ניחושים/תזוזות חיות של אחרים לפני הנעילה: המארח, נותן הרמז (שלא מנחש בעצמו),
+  // מי שרשאי לראות ניחושים/תזוזות חיות של אחרים לפני הנעילה: רק נותן הרמז הנוכחי (גם אם הוא לא המארח),
   // ובמצב משותף - כולם, כי אין שם תחרות שצריך להגן עליה
-  const canPeek = isHost || isPsychic || game.mode === 'shared';
+  const canPeek = isPsychic || game.mode === 'shared';
   return {
     ...game,
     target: revealed || (isPsychic && game.phase !== 'lobby') ? game.target : null,
