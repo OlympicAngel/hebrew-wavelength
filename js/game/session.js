@@ -5,8 +5,10 @@
  */
 import * as G from './engine.js';
 import { createHost, createClient } from '../net/transports.js';
+import { tabStorage } from '../ui/dom.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+const REJOIN_TOKEN_KEY = 'wavelength:rejoinToken'; // שמור בין רענוני דף/נפילות חיבור, כדי לשחזר את אותו שחקן
 
 /** פעולות ששמורות למארח בלבד */
 const HOST_ONLY = new Set(['config', 'start', 'next', 'restart', 'kick']);
@@ -34,6 +36,7 @@ export class HostSession extends Emitter {
     this.transport = createHost(transportKind);
     this.game = G.createGame();
     this.links = new Map(); // playerId -> Link
+    this.tokens = new Map(); // token סודי -> playerId, לזיהוי חיבור מחדש - לעולם לא משודר במצב המשחק
     this.me = G.createPlayer(uid(), profile.name, profile.avatar);
     this.me.isHost = true;
     this.game.players.push(this.me);
@@ -138,10 +141,16 @@ export class HostSession extends Emitter {
         if (!target || target.isHost) return;
         this.links.get(target.id)?.close();
         game.players = game.players.filter((p) => p.id !== target.id);
+        this._forgetToken(target.id);
         break;
       }
     }
     this._sync();
+  }
+
+  /** מוחק כל טוקן חיבור-מחדש ששייך לשחקן הזה - כדי שלא יישאר תקף אחרי שהוסר מהמשחק */
+  _forgetToken(playerId) {
+    for (const [token, pid] of this.tokens) if (pid === playerId) this.tokens.delete(token);
   }
 
   /** מחבר שחקן חדש ומתחיל להאזין להודעות שלו */
@@ -149,15 +158,29 @@ export class HostSession extends Emitter {
     link.on('message', (msg) => {
       if (msg.t === 'join') {
         if (link.playerId) return;
-        if (this.game.players.length >= G.MAX_PLAYERS || this.game.phase !== 'lobby') {
-          link.send({ t: 'error', msg: 'החדר מלא או שהמשחק כבר התחיל' });
+
+        // חיבור מחדש: טוקן שמור שתואם שחקן קיים (מנותק בד"כ) - משחזרים אותו במקום ליצור שחקן חדש
+        const existing = msg.token && this.game.players.find((p) => this.tokens.get(msg.token) === p.id);
+        if (existing) {
+          link.playerId = existing.id;
+          this.links.set(existing.id, link);
+          existing.connected = true;
+          link.send({ t: 'welcome', playerId: existing.id, token: msg.token });
+          this._sync();
+          return;
+        }
+
+        if (this.game.players.length >= G.MAX_PLAYERS) {
+          link.send({ t: 'error', msg: 'החדר מלא' });
           return link.close();
         }
         const player = G.createPlayer(uid(), String(msg.name || 'שחקן').slice(0, 14), msg.avatar);
+        const token = uid() + uid(); // סודי, נשלח רק ללקוח הזה ולעולם לא משודר בתוך מצב המשחק
+        this.tokens.set(token, player.id);
         link.playerId = player.id;
         this.links.set(player.id, link);
         this.game.players.push(player);
-        link.send({ t: 'welcome', playerId: player.id });
+        link.send({ t: 'welcome', playerId: player.id, token });
         this._sync();
         return;
       }
@@ -168,9 +191,11 @@ export class HostSession extends Emitter {
       const player = this.game.players.find((p) => p.id === link.playerId);
       if (!player) return;
       this.links.delete(player.id);
-      // בלובי פשוט מסירים; במהלך משחק משאירים כדי לשמור את הניקוד
-      if (this.game.phase === 'lobby') this.game.players = this.game.players.filter((p) => p.id !== player.id);
-      else {
+      // בלובי פשוט מסירים; במהלך משחק משאירים כדי לשמור את הניקוד ולאפשר חיבור מחדש עם אותו טוקן
+      if (this.game.phase === 'lobby') {
+        this.game.players = this.game.players.filter((p) => p.id !== player.id);
+        this._forgetToken(player.id);
+      } else {
         player.connected = false;
         if (this.game.phase === 'guess' && G.allGuessesIn(this.game)) this._reveal();
         if (this.game.phase === 'clue' && this.game.psychicId === player.id) this._reveal();
@@ -239,15 +264,19 @@ export class ClientSession extends Emitter {
   constructor(transportKind, profile) {
     super();
     this.isHost = false;
+    this.transportKind = transportKind;
     this.transport = createClient(transportKind);
     this.profile = profile;
     this.view = null;
     this.error = '';
     this.disconnected = false;
+    // טוקן חיבור-מחדש שמור מפעם קודמת (אם יש) - כך שנפילת חיבור באמצע משחק לא מאבדת ניקוד/מצב
+    this.token = tabStorage.get(REJOIN_TOKEN_KEY, null);
   }
 
   /** @param {string} [code] קוד חדר (בחיבור QR מקומי משתמשים ב-joinWithOffer) */
   async start(code) {
+    this.code = code; // נשמר לצורך ניסיון חיבור מחדש אוטומטי
     this._bind(await this.transport.connect(code));
   }
 
@@ -258,11 +287,29 @@ export class ClientSession extends Emitter {
     return answer;
   }
 
+  /**
+   * ניסיון חיבור מחדש אחרי נפילת חיבור - עם טרנספורט טרי (הישן כבר מת) וגם הטוקן השמור,
+   * כדי שהמארח יזהה אותנו כאותו שחקן וישחזר את הניקוד/מצב שלנו במקום ליצור שחקן חדש.
+   * לא רלוונטי לחיבור 'lan' - שם צריך סריקת QR חדשה כי אין ערוץ סיגנלינג ששרד.
+   */
+  async reconnect() {
+    if (this.transportKind === 'lan') throw new Error('בחיבור QR צריך לסרוק שוב');
+    this.transport = createClient(this.transportKind);
+    await this.start(this.code); // אם connect() נכשל/נזרק, disconnected נשאר true - התור אחראי לנסות שוב
+  }
+
   _bind(link) {
+    this.disconnected = false; // יש לינק פעיל - מבוטל רק כשהוא נסגר, ראו למטה
     this.link = link;
     link.on('message', (msg) => {
       if (msg.t === 'state') this.view = msg.view;
-      if (msg.t === 'welcome') this.playerId = msg.playerId;
+      if (msg.t === 'welcome') {
+        this.playerId = msg.playerId;
+        if (msg.token) {
+          this.token = msg.token;
+          tabStorage.set(REJOIN_TOKEN_KEY, msg.token);
+        }
+      }
       if (msg.t === 'error') this.error = msg.msg;
       this._emit();
     });
@@ -270,7 +317,7 @@ export class ClientSession extends Emitter {
       this.disconnected = true;
       this._emit();
     });
-    link.send({ t: 'join', name: this.profile.name, avatar: this.profile.avatar });
+    link.send({ t: 'join', name: this.profile.name, avatar: this.profile.avatar, token: this.token });
   }
 
   act(type, payload = {}) {

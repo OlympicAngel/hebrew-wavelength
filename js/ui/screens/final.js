@@ -1,6 +1,7 @@
 /** מסך הסיום: פודיום/מד קבוצתי (לפי המצב), וסיכום התורות */
 import { el, on, esc } from '../dom.js';
 import { standings, teamGauge } from '../../game/engine.js';
+import { openInviteModal } from '../invite.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -15,6 +16,7 @@ export function finalScreen(ctx) {
 
   on(root, 'click', '[data-restart]', () => ctx.act('restart'));
   on(root, 'click', '[data-leave]', () => ctx.leave());
+  on(root, 'click', '[data-invite]', () => openInviteModal(ctx));
 
   function update(view) {
     root.querySelector('[data-scoreboard]').innerHTML = view.mode === 'shared' ? sharedHtml(view) : competitiveHtml(view);
@@ -34,6 +36,7 @@ export function finalScreen(ctx) {
 
     root.querySelector('[data-actions]').innerHTML = ctx.session.isHost
       ? `<button class="btn-primary btn-block" data-restart>עוד סיבוב! 🔁</button>
+         <button class="btn-ghost btn-block btn-small" data-invite>➕ הוסיפו/חברו שחקן</button>
          <button class="btn-ghost btn-block btn-small" data-leave>סיום ויציאה</button>`
       : `<p class="center muted">המארח יכול להתחיל משחק חדש</p>
          <button class="btn-ghost btn-block btn-small" data-leave>יציאה</button>`;

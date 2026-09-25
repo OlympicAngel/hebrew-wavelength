@@ -6,6 +6,7 @@ import { el, on, esc, vibrate } from '../dom.js';
 import { Dial } from '../dial.js';
 import { maxSwaps } from '../../game/engine.js';
 import { PACKS } from '../../data/packs.js';
+import { openInviteModal } from '../invite.js';
 
 const packById = Object.fromEntries(PACKS.map((p) => [p.id, p]));
 const MOVE_THROTTLE_MS = 70; // תדירות שידור תזוזת המחט החיה למארח - מספיק חלק, לא מציף את הרשת
@@ -45,6 +46,7 @@ export function roundScreen(ctx) {
   const root = el(`
     <div class="stack fade-in">
       <div class="topbar">
+        ${ctx.session.isHost ? '<button class="btn-ghost btn-small" data-invite title="הוסיפו או חברו שחקן">➕</button>' : ''}
         <span class="pill" data-round></span>
         <span class="pill" data-category></span>
         <span class="pill" data-timer hidden></span>
@@ -82,6 +84,7 @@ export function roundScreen(ctx) {
   });
   on(root, 'click', '[data-next]', () => ctx.act('next'));
   on(root, 'click', '[data-bomb-btn]', () => ctx.act('bomb'));
+  on(root, 'click', '[data-invite]', () => openInviteModal(ctx));
 
   /* ------------------------------------------------------------- תצוגה */
 

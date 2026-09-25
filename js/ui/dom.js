@@ -55,3 +55,25 @@ export const storage = {
     }
   },
 };
+
+/**
+ * כמו storage, אבל לפי כרטיסייה (sessionStorage) - שורד רענון דף אבל לא משותף בין כרטיסיות.
+ * חשוב לזהות שחקן ספציפי לחיבור-מחדש: localStorage היה גורם לשתי כרטיסיות של "מכשיר אחד"
+ * לחלוק את אותו טוקן ולהתבלבל זו בזו.
+ */
+export const tabStorage = {
+  get(key, fallback) {
+    try {
+      return JSON.parse(sessionStorage.getItem(key)) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* מצב גלישה פרטית */
+    }
+  },
+};
