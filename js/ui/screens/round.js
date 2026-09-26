@@ -18,6 +18,9 @@ const BOMB_WINDOW_RATIO = 0.5; // חייב להתאים ל-BOMB_WINDOW_RATIO ב-
 // מחוץ ל-roundScreen בכוונה: app.js יוצר מסך חדש בכל מעבר שלב (רמז/ניחוש/חשיפה), אז משתנה מקומי
 // היה מתאפס בכל מעבר ומציג שוב את אפקט ה"פיצוץ" על אירוע ישן - כאן הוא שורד בין יצירות המסך.
 let lastBombAt = 0;
+// כנ"ל עבור מיקומי הדירוג החי - כדי שאנימציית ה-FLIP תעבוד גם במעבר בדיוק לשלב החשיפה,
+// שהוא הרגע שהניקוד באמת משתנה (ואגב כך גם המסך נוצר מחדש).
+let lastLeaderboardRects = null;
 
 export function roundScreen(ctx) {
   let myGuess = 50;
@@ -28,6 +31,7 @@ export function roundScreen(ctx) {
   let lastVibrateValue = null;
   let revealAnimated = false; // מסך זה נוצר מחדש בכל מעבר שלב, אז זה תמיד "false" בכניסה טרייה לחשיפה
   let lastScoreShown = null;
+  let lastCardId = undefined; // לזיהוי קלף חדש (תור חדש/החלפה/חבלה) כדי להריץ את אנימציית ה"חלוקה"
 
   const dial = new Dial({
     interactive: false,
@@ -85,6 +89,7 @@ export function roundScreen(ctx) {
     locked = true;
     dial.setInteractive(false);
     ctx.act('guess', { value: myGuess });
+    stampLock();
     render(currentView);
   });
   on(root, 'click', '[data-next]', () => ctx.act('next'));
@@ -150,6 +155,13 @@ export function roundScreen(ctx) {
     document.body.append(overlay);
     vibrate([40, 60, 120]);
     setTimeout(() => overlay.remove(), 3200);
+  }
+
+  /** חותמת "ננעל" קופצת רגע מעל החוגה - משוב מיידי שהניחוש אכן נשלח */
+  function stampLock() {
+    const stamp = el('<div class="lock-stamp">🔒</div>');
+    root.querySelector('.dial-wrap').append(stamp);
+    setTimeout(() => stamp.remove(), 750);
   }
 
   /** @returns {string} HTML של אזור הכפתורים, לפי השלב והתפקיד */
@@ -264,7 +276,7 @@ export function roundScreen(ctx) {
         .map((p, i) => {
           const isPsychic = p.id === view.psychicId;
           const ready = view.guesses[p.id] != null;
-          return `<div class="mini-row ${p.id === view.you ? 'me' : ''} ${p.score > 0 && p.score === sorted[0].score ? 'leading' : ''} ${p.connected ? '' : 'off'}">
+          return `<div class="mini-row ${p.id === view.you ? 'me' : ''} ${p.score > 0 && p.score === sorted[0].score ? 'leading' : ''} ${p.connected ? '' : 'off'}" data-pid="${p.id}">
               <span class="mini-rank">${RANK_MEDALS[i] ?? i + 1}</span>
               <span class="mini-avatar">${p.avatar}</span>
               <span class="mini-name">${esc(p.name)}${isPsychic ? ' 🎙️' : ready ? ' ✅' : ''}</span>
@@ -273,6 +285,32 @@ export function roundScreen(ctx) {
             </div>`;
         })
         .join('')}</div>`;
+  }
+
+  /**
+   * מציג את הדירוג החי עם אנימציית FLIP: שורות שמחליפות מקום (עולות/יורדות בדירוג) גולשות
+   * חלק למקומן החדש במקום לקפוץ, כדי שעליית מקום תורגש כמו במשחק אמיתי.
+   */
+  function renderLeaderboard(view) {
+    const container = root.querySelector('[data-people]');
+    // תור ראשון של משחק חדש (כולל אחרי "עוד סיבוב") - בלי FLIP, כדי לא לגלוש ממיקומים ישנים מהמשחק הקודם
+    const before = view.round === 1 && view.phase === 'clue' ? null : lastLeaderboardRects;
+    const after = new Map();
+    container.innerHTML = leaderboardHtml(view);
+    container.querySelectorAll('.mini-row[data-pid]').forEach((row) => {
+      after.set(row.dataset.pid, row.getBoundingClientRect());
+      const prevRect = before?.get(row.dataset.pid);
+      if (!prevRect) return; // שחקן חדש או רינדור ראשון - נכנס כרגיל, בלי FLIP
+      const dy = prevRect.top - row.getBoundingClientRect().top;
+      if (Math.abs(dy) < 1) return;
+      row.style.transition = 'none';
+      row.style.transform = `translateY(${dy}px)`;
+      requestAnimationFrame(() => {
+        row.style.transition = 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        row.style.transform = '';
+      });
+    });
+    lastLeaderboardRects = after;
   }
 
   function render(view) {
@@ -297,7 +335,8 @@ export function roundScreen(ctx) {
     root.querySelector('[data-bomb-slot]').innerHTML = bombHtml(view);
     root.querySelector('[data-round]').textContent = `תור ${view.round}/${view.totalTurns}`;
     const pack = packById[view.card?.packId];
-    root.querySelector('[data-category]').textContent = pack ? `${pack.emoji} ${pack.name}` : '';
+    const categoryPill = root.querySelector('[data-category]');
+    categoryPill.textContent = pack ? `${pack.emoji} ${pack.name}` : '';
 
     // ניקוד בסרגל העליון - נספר בעדינות במקום לקפוץ, כשהוא משתנה (למשל אחרי חשיפת סיבוב)
     const scorePrefix = view.mode === 'shared' ? '🤝 ' : '⭐ ';
@@ -313,14 +352,32 @@ export function roundScreen(ctx) {
     }
     lastScoreShown = scoreVal;
 
-    root.querySelector('[data-low]').textContent = view.card?.low ?? '';
-    root.querySelector('[data-high]').textContent = view.card?.high ?? '';
+    const lowEl = root.querySelector('[data-low]');
+    const highEl = root.querySelector('[data-high]');
+    lowEl.textContent = view.card?.low ?? '';
+    highEl.textContent = view.card?.high ?? '';
+
+    // קלף חדש (תור חדש, החלפה או חבלה) - "מחלקים" אותו מחדש עם היפוך קטן; רק בשלב הרמז, שם קלפים באמת מתחלפים
+    if (view.phase === 'clue' && view.card?.id !== lastCardId) {
+      lastCardId = view.card?.id;
+      for (const dealEl of [categoryPill, lowEl.closest('.spectrum')]) {
+        dealEl.classList.remove('card-deal');
+        void dealEl.offsetWidth;
+        dealEl.classList.add('card-deal');
+      }
+    }
 
     const banner = root.querySelector('[data-clue]');
+    const bannerWasHidden = banner.hidden;
     banner.hidden = view.phase === 'clue';
     if (!banner.hidden) {
       root.querySelector('[data-clue-who]').textContent = `הרמז של ${psychicName(view)}`;
       root.querySelector('[data-clue-text]').textContent = view.clue;
+      if (bannerWasHidden) {
+        banner.classList.remove('clue-pop');
+        void banner.offsetWidth;
+        banner.classList.add('clue-pop');
+      }
     }
 
     dial.setTarget(view.target);
@@ -357,7 +414,8 @@ export function roundScreen(ctx) {
     }
 
     if (view.phase !== 'reveal') root.querySelector('[data-controls]').innerHTML = controlsHtml(view, isPsychic);
-    root.querySelector('[data-people]').innerHTML = view.mode === 'shared' ? peopleHtml(view) : leaderboardHtml(view);
+    if (view.mode === 'shared') root.querySelector('[data-people]').innerHTML = peopleHtml(view);
+    else renderLeaderboard(view);
     startTimer(view);
   }
 
@@ -367,10 +425,14 @@ export function roundScreen(ctx) {
     const pill = root.querySelector('[data-timer]');
     pill.hidden = !((view.phase === 'guess' || view.phase === 'clue') && view.deadline);
     if (pill.hidden) return;
+    let lastWholeSecond = null;
     const paint = () => {
       const left = Math.max(0, Math.ceil((view.deadline - Date.now()) / 1000));
       pill.textContent = `⏱ ${left}`;
       pill.classList.toggle('warn', left <= 10);
+      // טיק-טוק קטן בשניות האחרונות - תחושת דחיפות בלי להיות מציק לאורך כל הטיימר
+      if (left <= 5 && left > 0 && left !== lastWholeSecond) vibrate(15);
+      lastWholeSecond = left;
       if (view.phase === 'clue') paintBomb(view);
       if (left <= 0) clearInterval(tick);
     };

@@ -1,5 +1,5 @@
 /** הלובי: מי מחובר, איך מזמינים שחקנים, והגדרות המשחק (עריכה חיה למארח, תקציר לשאר) */
-import { el, on, esc, toast } from '../dom.js';
+import { el, on, esc, toast, vibrate } from '../dom.js';
 import { showQR, scanQR } from '../qr.js';
 import { MAX_PLAYERS, maxSwaps, resolveMode } from '../../game/engine.js';
 import { PACKS } from '../../data/packs.js';
@@ -89,6 +89,7 @@ export function lobbyScreen(ctx) {
   const kind = ctx.session.transport.kind;
   let scanner = null;
   let latestView = null;
+  let knownPlayerIds = null; // null = עוד לא ראינו אף עדכון - כדי לא "לחגוג" הצטרפות של שחקנים שכבר היו כאן
 
   const root = el(`
     <div class="stack fade-in">
@@ -203,9 +204,15 @@ export function lobbyScreen(ctx) {
     latestView = view;
     const players = view.players;
     root.querySelector('[data-count]').textContent = `${players.length}/${MAX_PLAYERS}`;
+
+    // שחקן שהצטרף מאז העדכון הקודם מקבל כניסה עם "קפיצה" קטנה, לא סתם מופיע
+    const newIds = knownPlayerIds ? players.map((p) => p.id).filter((id) => !knownPlayerIds.has(id)) : [];
+    if (newIds.length) vibrate(10);
+    knownPlayerIds = new Set(players.map((p) => p.id));
+
     root.querySelector('[data-players]').innerHTML = players
       .map(
-        (p) => `<div class="player">
+        (p) => `<div class="player ${newIds.includes(p.id) ? 'player-join' : ''}">
             <span style="font-size:1.4rem">${p.avatar}</span>
             <span class="name">${esc(p.name)}</span>
             ${p.isHost ? '<span class="badge">מארח</span>' : ''}

@@ -211,6 +211,10 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
 .player .badge.ready { background: var(--green); color: #05241a; }
 .player.off { opacity: 0.45; }
 .player .score { margin-inline-start: auto; font-weight: 800; font-size: 1.1rem; }
+.player.player-join { animation: player-join 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes player-join {
+  from { opacity: 0; transform: scale(0.8) translateY(-6px); }
+}
 
 /* ------------------------------------------------------------ דירוג חי (מצב תחרותי, באמצע המשחק) */
 
@@ -251,7 +255,40 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
 
 .topbar { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; color: var(--cream-dim); }
 .pill { background: rgba(0, 0, 0, 0.28); padding: 6px 12px; border-radius: 999px; font-weight: 700; color: var(--cream); }
-.pill.warn { background: var(--orange); color: #fff; }
+.pill.warn { background: var(--orange); color: #fff; animation: pill-warn-pulse 1s ease-in-out infinite; }
+@keyframes pill-warn-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+/* הקלף (קטגוריה + ספקטרום) "נחלק" מחדש - תור חדש, החלפה או חבלה */
+.card-deal { animation: card-deal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes card-deal {
+  from { opacity: 0; transform: scale(0.85) rotate(-4deg); }
+}
+
+/* באנר הרמז קופץ פנימה ברגע שהוא מתגלה למנחשים */
+.clue-pop { animation: clue-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes clue-pop {
+  from { opacity: 0; transform: scale(0.9) translateY(-8px); }
+}
+
+/* חותמת נעילה שקופצת רגע מעל החוגה כמשוב מיידי */
+.lock-stamp {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 3.6rem;
+  pointer-events: none;
+  animation: lock-stamp 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes lock-stamp {
+  0% { opacity: 0; transform: scale(2.4) rotate(-18deg); }
+  50% { opacity: 1; transform: scale(0.92) rotate(6deg); }
+  70% { transform: scale(1.05) rotate(0deg); }
+  100% { opacity: 0; transform: scale(1); }
+}
 
 /* ------------------------------------------------------------ תוצאות וסיכום */
 
