@@ -7,6 +7,9 @@ import { Dial } from '../dial.js';
 import { maxSwaps } from '../../game/engine.js';
 import { PACKS } from '../../data/packs.js';
 import { openInviteModal } from '../invite.js';
+import { animateNumber, burstConfetti } from '../anim.js';
+
+const REVEAL_STAGGER_MS = 400; // קצב חשיפת שורות התוצאה, אחת אחרי השנייה - בונה מתח
 
 const packById = Object.fromEntries(PACKS.map((p) => [p.id, p]));
 const MOVE_THROTTLE_MS = 70; // תדירות שידור תזוזת המחט החיה למארח - מספיק חלק, לא מציף את הרשת
@@ -23,6 +26,8 @@ export function roundScreen(ctx) {
   let tick = null;
   let lastMoveSent = 0;
   let lastVibrateValue = null;
+  let revealAnimated = false; // מסך זה נוצר מחדש בכל מעבר שלב, אז זה תמיד "false" בכניסה טרייה לחשיפה
+  let lastScoreShown = null;
 
   const dial = new Dial({
     interactive: false,
@@ -161,38 +166,75 @@ export function roundScreen(ctx) {
         </div>`;
     }
 
-    if (view.phase === 'guess') {
-      if (isPsychic) return `<p class="center">⏳ ממתינים לניחושים...</p>`;
-      return locked
-        ? `<p class="center">✅ הניחוש ננעל. ממתינים לשאר.</p>`
-        : `<button class="btn-primary btn-block" data-lock>נעלו את הניחוש 🔒</button>`;
-    }
+    // guess
+    if (isPsychic) return `<p class="center">⏳ ממתינים לניחושים...</p>`;
+    return locked
+      ? `<p class="center">✅ הניחוש ננעל. ממתינים לשאר.</p>`
+      : `<button class="btn-primary btn-block" data-lock>נעלו את הניחוש 🔒</button>`;
+  }
 
-    // חשיפה
+  /**
+   * חשיפת התוצאות בשלב 'reveal' - לא כל השורות בבת אחת: כל שורה "נוחתת" בתורה עם אפקט קפיצה,
+   * הניקוד שלה נספר מ-0 ועד לערך הסופי, ופגיעה מושלמת (4) מקבלת קונפטי. כדי שהמתח יורגש כמו במשחק אמיתי.
+   * נקרא פעם אחת בלבד לכל כניסה לחשיפה (ראו revealAnimated ב-render).
+   */
+  function renderReveal(view) {
+    const container = root.querySelector('[data-controls]');
     const last = view.history[view.history.length - 1];
-    const rows = last.results
-      .map((r) => {
-        const p = view.players.find((x) => x.id === r.playerId);
-        return `<div class="result-row">
-            <span class="points p${r.points}">${r.points}</span>
-            <span style="font-size:1.3rem">${p?.avatar ?? '❔'}</span>
-            <span class="name">${esc(p?.name ?? '')}</span>
-            <span class="muted" style="margin-inline-start:auto">${r.guess == null ? 'לא ניחש' : `סטייה ${Math.abs(r.guess - last.target)}`}</span>
-          </div>`;
-      })
-      .join('');
     const psychic = view.players.find((p) => p.id === last.psychicId);
-    return `<h3>תוצאות הסיבוב</h3>
-      <div class="result-row">
-        <span class="points p${last.psychicPoints}">${last.psychicPoints}</span>
-        <span style="font-size:1.3rem">${psychic?.avatar ?? '❔'}</span>
-        <span class="name">${esc(psychic?.name ?? '')}</span>
-        <span class="badge psychic" style="margin-inline-start:auto">הרמז</span>
-      </div>
-      ${rows}
-      ${ctx.session.isHost
-        ? `<button class="btn-primary btn-block" data-next>${view.round >= view.totalTurns ? 'לתוצאות הסופיות 🏆' : 'לתור הבא ←'}</button>`
-        : '<p class="center muted">ממתינים שהמארח ימשיך...</p>'}`;
+
+    const rows = [
+      { isPsychic: true, avatar: psychic?.avatar, name: psychic?.name, points: last.psychicPoints, guess: null },
+      ...last.results.map((r) => ({
+        isPsychic: false,
+        avatar: view.players.find((p) => p.id === r.playerId)?.avatar,
+        name: view.players.find((p) => p.id === r.playerId)?.name,
+        points: r.points,
+        guess: r.guess,
+      })),
+    ];
+
+    container.innerHTML = `<h3>תוצאות הסיבוב</h3><div data-reveal-rows></div><div data-next-slot></div>`;
+    const rowsEl = container.querySelector('[data-reveal-rows]');
+
+    rows.forEach((r, i) => {
+      setTimeout(() => {
+        const row = el(`<div class="result-row reveal-pop">
+            <span class="points p0" data-points>0</span>
+            <span style="font-size:1.3rem">${r.avatar ?? '❔'}</span>
+            <span class="name">${esc(r.name ?? '')}</span>
+            ${r.isPsychic
+              ? '<span class="badge psychic" style="margin-inline-start:auto">הרמז</span>'
+              : `<span class="muted" style="margin-inline-start:auto">${r.guess == null ? 'לא ניחש' : `סטייה ${Math.abs(r.guess - last.target)}`}</span>`}
+          </div>`);
+        rowsEl.append(row);
+        vibrate(6);
+        const pointsEl = row.querySelector('[data-points]');
+        let shownPointClass = 'p0';
+        animateNumber(0, r.points, 420, (v) => {
+          pointsEl.textContent = v;
+          // מחליפים רק את מחלקת p{v} - לא דורסים את כל ה-className, כדי לא למחוק את perfect שמתווסף בהמשך
+          pointsEl.classList.replace(shownPointClass, 'p' + v);
+          shownPointClass = 'p' + v;
+        });
+        if (r.points === 4) {
+          setTimeout(() => {
+            pointsEl.classList.add('perfect');
+            burstConfetti(row);
+            vibrate([20, 30, 60]);
+          }, 480);
+        }
+      }, i * REVEAL_STAGGER_MS);
+    });
+
+    // כפתור ההמשך מופיע רק אחרי שכל השורות נחתו - כדי לא לקטוע את המתח באמצע
+    setTimeout(() => {
+      const nextSlot = container.querySelector('[data-next-slot]');
+      if (!nextSlot) return; // המסך כבר עבר לתור הבא לפני שהאנימציה הספיקה להסתיים
+      nextSlot.innerHTML = ctx.session.isHost
+        ? `<button class="btn-primary btn-block stagger-in" data-next>${view.round >= view.totalTurns ? 'לתוצאות הסופיות 🏆' : 'לתור הבא ←'}</button>`
+        : '<p class="center muted stagger-in">ממתינים שהמארח ימשיך...</p>';
+    }, rows.length * REVEAL_STAGGER_MS + 300);
   }
 
   const psychicName = (view) => view.players.find((p) => p.id === view.psychicId)?.name ?? '';
@@ -256,8 +298,21 @@ export function roundScreen(ctx) {
     root.querySelector('[data-round]').textContent = `תור ${view.round}/${view.totalTurns}`;
     const pack = packById[view.card?.packId];
     root.querySelector('[data-category]').textContent = pack ? `${pack.emoji} ${pack.name}` : '';
-    root.querySelector('[data-score]').textContent =
-      view.mode === 'shared' ? `🤝 ${view.teamScore}` : `⭐ ${view.players.find((p) => p.id === view.you)?.score ?? 0}`;
+
+    // ניקוד בסרגל העליון - נספר בעדינות במקום לקפוץ, כשהוא משתנה (למשל אחרי חשיפת סיבוב)
+    const scorePrefix = view.mode === 'shared' ? '🤝 ' : '⭐ ';
+    const scoreVal = view.mode === 'shared' ? view.teamScore : (view.players.find((p) => p.id === view.you)?.score ?? 0);
+    const scorePill = root.querySelector('[data-score]');
+    if (lastScoreShown === null) {
+      scorePill.textContent = scorePrefix + scoreVal;
+    } else if (scoreVal !== lastScoreShown) {
+      animateNumber(lastScoreShown, scoreVal, 700, (v) => (scorePill.textContent = scorePrefix + v));
+      scorePill.classList.remove('score-pop');
+      void scorePill.offsetWidth; // מאלץ reflow כדי שהאנימציה תרוץ מחדש גם אם המחלקה כבר הייתה שם
+      scorePill.classList.add('score-pop');
+    }
+    lastScoreShown = scoreVal;
+
     root.querySelector('[data-low]').textContent = view.card?.low ?? '';
     root.querySelector('[data-high]').textContent = view.card?.high ?? '';
 
@@ -274,15 +329,19 @@ export function roundScreen(ctx) {
     if (view.phase === 'reveal') {
       dial.setPeers([]);
       const last = view.history[view.history.length - 1];
-      dial.setNeedles(
-        last.results
-          .filter((r) => r.guess != null)
-          .map((r) => ({
-            value: r.guess,
-            avatar: view.players.find((p) => p.id === r.playerId)?.avatar,
-            me: r.playerId === view.you,
-          })),
-      );
+      const needles = last.results
+        .filter((r) => r.guess != null)
+        .map((r) => ({
+          value: r.guess,
+          avatar: view.players.find((p) => p.id === r.playerId)?.avatar,
+          me: r.playerId === view.you,
+        }));
+      // הרצף המדורג (renderReveal) ותנועת המחטים ירוצו פעם אחת בלבד לכניסה הזו לחשיפה
+      dial.setNeedles(needles, { animate: !revealAnimated });
+      if (!revealAnimated) {
+        revealAnimated = true;
+        renderReveal(view);
+      }
     } else {
       dial.setNeedles(isPsychic ? [] : null);
       // תזוזות חיות של שאר המנחשים לפני נעילה: רק לנותן הרמז הנוכחי (גם אם הוא לא המארח), ובמצב משותף - לכולם
@@ -297,7 +356,7 @@ export function roundScreen(ctx) {
       );
     }
 
-    root.querySelector('[data-controls]').innerHTML = controlsHtml(view, isPsychic);
+    if (view.phase !== 'reveal') root.querySelector('[data-controls]').innerHTML = controlsHtml(view, isPsychic);
     root.querySelector('[data-people]').innerHTML = view.mode === 'shared' ? peopleHtml(view) : leaderboardHtml(view);
     startTimer(view);
   }

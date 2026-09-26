@@ -106,10 +106,27 @@ export class Dial {
     this.render();
   }
 
-  /** @param {{value:number, avatar?:string, me?:boolean}[]|null} needles מחטים מפורשות, או null למחט שלי בלבד */
-  setNeedles(needles) {
-    this.needles = needles;
-    this.render();
+  /**
+   * @param {{value:number, avatar?:string, me?:boolean}[]|null} needles מחטים מפורשות, או null למחט שלי בלבד
+   * @param {{animate?:boolean, duration?:number}} [opts] animate=true מגלגל את המחטים בתנועה מהמיקום הקודם
+   *   במקום קפיצה מיידית - לרגע החשיפה, כדי שהניחושים "יתגלגלו" למקומם במקום להופיע פתאום
+   */
+  setNeedles(needles, { animate = false, duration = 650 } = {}) {
+    if (!animate || !needles) {
+      this.needles = needles;
+      this.render();
+      return;
+    }
+    const from = (this.needles ?? []).map((n) => n.value);
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out
+      this.needles = needles.map((n, i) => ({ ...n, value: (from[i] ?? 50) + (n.value - (from[i] ?? 50)) * eased }));
+      this.render();
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   /** @param {{value:number, avatar?:string}[]} peers מחטים חיים שמתווספות תמיד מעל needles (למארח, בזמן אמת) */
@@ -120,15 +137,20 @@ export class Dial {
 
   render() {
     const bands = this.el.querySelector('.bands');
-    if (this.target == null) bands.innerHTML = '';
-    else {
-      // מציירים מהרחב לצר כדי שהמרכז (4 נקודות) יישאר למעלה
-      bands.innerHTML = [...BANDS]
-        .reverse()
-        .map((b) => `<path class="band-${b.points}" d="${sector(this.target - b.half, this.target + b.half)}"></path>`)
-        .join('');
-      const [tx, ty] = point(this.target);
-      bands.insertAdjacentHTML('beforeend', `<line class="target-line" x1="${CX}" y1="${CY}" x2="${tx}" y2="${ty}"/>`);
+    // בונים מחדש רק כשהמטרה באמת השתנתה - גם לביצועים (לא בכל תזוזת אצבע) וגם כדי שאנימציית
+    // ה"הופעה" של הטריז תרוץ פעם אחת בלבד ולא תהבהב על כל render במהלך הניחוש
+    if (this.target !== this._lastTarget) {
+      this._lastTarget = this.target;
+      if (this.target == null) bands.innerHTML = '';
+      else {
+        // מציירים מהרחב לצר כדי שהמרכז (4 נקודות) יישאר למעלה
+        bands.innerHTML = [...BANDS]
+          .reverse()
+          .map((b) => `<path class="band-${b.points} wedge-in" d="${sector(this.target - b.half, this.target + b.half)}"></path>`)
+          .join('');
+        const [tx, ty] = point(this.target);
+        bands.insertAdjacentHTML('beforeend', `<line class="target-line wedge-in" x1="${CX}" y1="${CY}" x2="${tx}" y2="${ty}"/>`);
+      }
     }
 
     const marks = this.el.querySelector('.marks');

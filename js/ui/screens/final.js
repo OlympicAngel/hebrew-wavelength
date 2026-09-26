@@ -2,10 +2,14 @@
 import { el, on, esc } from '../dom.js';
 import { standings, teamGauge } from '../../game/engine.js';
 import { openInviteModal } from '../invite.js';
+import { animateNumber, burstConfetti } from '../anim.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
+const PODIUM_DELAY = { bronze: 0, silver: 450, gold: 900 }; // בונים מתח: הכי נמוך קודם, הזהב אחרון
 
 export function finalScreen(ctx) {
+  let revealed = false; // מוודא שרצף הכניסה/קונפטי רץ פעם אחת בלבד, גם אם המסך הזה מתעדכן שוב
+
   const root = el(`
     <div class="stack fade-in">
       <div class="logo"><h1>🏆 סוף<span class="wave"> המשחק</span></h1></div>
@@ -19,7 +23,13 @@ export function finalScreen(ctx) {
   on(root, 'click', '[data-invite]', () => openInviteModal(ctx));
 
   function update(view) {
-    root.querySelector('[data-scoreboard]').innerHTML = view.mode === 'shared' ? sharedHtml(view) : competitiveHtml(view);
+    const firstReveal = !revealed;
+    revealed = true;
+
+    root.querySelector('[data-scoreboard]').innerHTML =
+      view.mode === 'shared' ? sharedHtml(view, firstReveal) : competitiveHtml(view, firstReveal);
+    if (firstReveal) animateReveal(view);
+
     root.querySelector('[data-history]').innerHTML = view.history
       .map((h) => {
         const psychic = view.players.find((p) => p.id === h.psychicId);
@@ -42,29 +52,52 @@ export function finalScreen(ctx) {
          <button class="btn-ghost btn-block btn-small" data-leave>יציאה</button>`;
   }
 
+  /** אחרי שהפודיום/מד עלו למסך - סופרים את המספרים ומפוצצים קונפטי על הזהב, בתזמון שמתאים לאנימציית ה-CSS */
+  function animateReveal(view) {
+    if (view.mode === 'shared') {
+      const scoreEl = root.querySelector('[data-team-score]');
+      if (scoreEl) setTimeout(() => animateNumber(0, +scoreEl.dataset.target, 700, (v) => (scoreEl.textContent = v)), 250);
+      return;
+    }
+    root.querySelectorAll('[data-podium-score]').forEach((numEl) => {
+      const block = numEl.closest('.block');
+      const delay = parseFloat(block?.style.animationDelay) || 0;
+      setTimeout(() => animateNumber(0, +numEl.dataset.target, 500, (v) => (numEl.textContent = v)), delay + 200);
+    });
+    const goldBlock = root.querySelector('.step.gold .block');
+    if (goldBlock) {
+      const delay = parseFloat(goldBlock.style.animationDelay) || 0;
+      setTimeout(() => burstConfetti(goldBlock, 26), delay + 650);
+    }
+  }
+
   return { el: root, update };
 }
 
 /** @returns {string} פודיום + טבלת ניקוד אישית - למצב תחרותי */
-function competitiveHtml(view) {
+function competitiveHtml(view, firstReveal) {
   const table = standings(view);
   const top = table.slice(0, 3);
   const order = [top[1], top[0], top[2]].filter(Boolean); // כסף במרכז-שמאל, זהב במרכז
   const classes = new Map([[top[0], 'gold'], [top[1], 'silver'], [top[2], 'bronze']]);
 
   const podium = order
-    .map(
-      (p) => `<div class="step ${classes.get(p)}">
+    .map((p) => {
+      const cls = classes.get(p);
+      const delay = firstReveal ? PODIUM_DELAY[cls] : 0;
+      return `<div class="step ${cls}">
           <div class="face">${p.avatar}</div>
           <div class="muted">${esc(p.name)}</div>
-          <div class="block"><div class="big-num" style="font-size:1.5rem">${p.score}</div></div>
-        </div>`,
-    )
+          <div class="block" style="animation-delay:${delay}ms">
+            <div class="big-num" data-podium-score data-target="${p.score}" style="font-size:1.5rem">${firstReveal ? 0 : p.score}</div>
+          </div>
+        </div>`;
+    })
     .join('');
 
   const rows = table
     .map(
-      (p) => `<div class="player">
+      (p, i) => `<div class="player ${firstReveal ? 'stagger-in' : ''}" style="${firstReveal ? `animation-delay:${1100 + i * 90}ms` : ''}">
           <span>${MEDALS[p.rank - 1] ?? `${p.rank}.`}</span>
           <span style="font-size:1.3rem">${p.avatar}</span>
           <span class="name">${esc(p.name)}${p.id === view.you ? ' (אתם)' : ''}</span>
@@ -79,14 +112,14 @@ function competitiveHtml(view) {
 }
 
 /** @returns {string} מד ההישג הקבוצתי (חלש/נחמד/מעולה/אגדי) - למצב משותף */
-function sharedHtml(view) {
+function sharedHtml(view, firstReveal) {
   const gauge = teamGauge(view);
   return `<div class="card center">
       <h3>הישג הקבוצה</h3>
       <div style="font-size:4rem;line-height:1">${gauge.emoji}</div>
       <div class="big-num">${gauge.label}</div>
-      <div class="gauge-bar" dir="ltr"><div class="gauge-fill gauge-${gauge.key}" style="width:${Math.round(gauge.ratio * 100)}%"></div></div>
+      <div class="gauge-bar" dir="ltr"><div class="gauge-fill gauge-${gauge.key} ${firstReveal ? 'first-reveal' : ''}" style="width:${Math.round(gauge.ratio * 100)}%"></div></div>
       <div class="row between muted" dir="ltr" style="font-size:.78rem"><span>חלש</span><span>נחמד</span><span>מעולה</span><span>אגדי</span></div>
-      <p class="muted">ניקוד קבוצתי: ${view.teamScore} נקודות ב-${view.history.length} תורות</p>
+      <p class="muted">ניקוד קבוצתי: <span data-team-score data-target="${view.teamScore}">${firstReveal ? 0 : view.teamScore}</span> נקודות ב-${view.history.length} תורות</p>
     </div>`;
 }

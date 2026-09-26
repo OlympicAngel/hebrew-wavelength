@@ -440,3 +440,57 @@ label { font-size: 0.9rem; color: var(--cream-dim); }
 
 .fade-in { animation: fade 0.25s ease both; }
 @keyframes fade { from { opacity: 0; transform: translateY(8px); } }
+
+/* ------------------------------------------------------------ אנימציות משחק */
+
+/* כל שורת תוצאה "קופצת" פנימה כשהיא מתגלה - חלק מרצף החשיפה המדורג */
+.result-row.reveal-pop { animation: reveal-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes reveal-pop {
+  0% { opacity: 0; transform: scale(0.7) translateY(10px); }
+  60% { opacity: 1; transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* ניקוד מושלם (4) מהבהב ומתנפח רגע כשהוא מגיע */
+.points.perfect { animation: points-perfect 0.6s ease; }
+@keyframes points-perfect {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.35) rotate(-6deg); box-shadow: 0 0 0 6px rgba(242, 100, 59, 0.35); }
+}
+
+/* קפיצת ניקוד קטנה כשהניקוד בסרגל העליון מתעדכן */
+.score-pop { animation: score-pop 0.5s ease; }
+@keyframes score-pop {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.25); color: var(--yellow); }
+}
+
+/* קונפטי - שברי צבע שמתפזרים מהאלמנט ונעלמים */
+.confetti-layer { position: fixed; inset: 0; pointer-events: none; z-index: 85; }
+.confetti-bit {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: confetti-fly 0.9s ease-out forwards;
+}
+@keyframes confetti-fly {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + 90px)) rotate(var(--rot)); opacity: 0; }
+}
+
+/* הטריז/קו המטרה נדלקים בפייד כשהם מופיעים לראשונה (לא בכל תזוזת ניחוש) */
+.wedge-in { animation: wedge-fade 0.45s ease; }
+@keyframes wedge-fade { from { opacity: 0; } }
+
+/* פודיום שגדל מלמטה למעלה - ה-delay הפרטני נקבע ב-JS לפי הדירוג, כדי שהזהב יגיע אחרון */
+.podium .block { transform-origin: bottom; animation: podium-grow 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes podium-grow { from { transform: scaleY(0); opacity: 0; } }
+
+/* מד הישג קבוצתי - הפס גדל מ-0 לרוחב שנקבע ב-style בפעם הראשונה שהוא מופיע */
+.gauge-fill.first-reveal { animation: gauge-grow 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes gauge-grow { from { width: 0; } }
+
+/* שורת דירוג/תוצאה נכנסת בגלישה מדורגת */
+.stagger-in { animation: stagger-in 0.35s ease both; }
+@keyframes stagger-in { from { opacity: 0; transform: translateX(12px); } }
